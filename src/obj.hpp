@@ -14,7 +14,7 @@ namespace inert {
     const float frictionMove  = 0.98f;
 
     const float jitterCutoffLinear = 0.1f;
-    const float jitterCutoffAngular = 0.5f;
+    const float jitterCutoffAngular = 0.1f;
     
     enum class BodyType { STATIC, DYNAMIC, KINEMATIC };
     enum class FrictionState { NONE, STATIC, KINETIC };
@@ -40,6 +40,9 @@ namespace inert {
         Vector3 inverseInertia = { 2.0f, 2.0f, 1.25f }; // 1/I
         
         float restitution = 0.4f;
+
+        float muStatic = 0.90f;
+        float muKinetic = 0.20f;
 
         // Accumulators
         Vector3 forceAccum = { 0.0f, 0.0f, 0.0f };
@@ -110,17 +113,24 @@ namespace inert {
         void applyCollisions() {
             if (!hasGroundCollision) return;
 
+            float maxPenetration = 0.0f;
+
             for (const auto& collider : colliders) {
                 if (collider.type == ColliderType::POINT_CLOUD) {
                     for (const auto& localPt : collider.localPoints) {
                         Vector3 worldPoint = Vector3Add(state.position, Vector3Transform(localPt, QuaternionToMatrix(state.orientation)));
+                        
                         if (worldPoint.y < groundLevel) {
                             resolveCollision(worldPoint, { 0.0f, 1.0f, 0.0f });
-                            state.position.y += (groundLevel - worldPoint.y); 
+                            
+                            float penetration = groundLevel - worldPoint.y;
+                            if (penetration > maxPenetration) maxPenetration = penetration;
                         }
                     }
                 }
             }
+            
+            if (maxPenetration > 0.0f) state.position.y += maxPenetration;
         }
 
     public:
@@ -131,8 +141,14 @@ namespace inert {
         
         Vector3 getPosition() const { return state.position; }
         Vector3 getVelocity() const { return state.velocity; }
+        Vector3 getRotationVelocity() const { return state.rotatVel; }
         Quaternion getOrientation() const { return state.orientation; }
         
+        float getMass() const { return state.mass; }
+        Vector3 getInertia() const { return state.inertia; }
+        Vector3 getForceAccum() const { return state.forceAccum; }
+        Vector3 getTorqueAccum() const { return state.torqueAccum; }
+
         bool getAngularActivity() { return angularActivity; }
         bool getLinearActivity() { return linearActivity; }
         
@@ -144,12 +160,10 @@ namespace inert {
             if (bodyType != BodyType::DYNAMIC) return;
             state.forceAccum = Vector3Add(state.forceAccum, force);
         }
-        void addForceAtPoint(Vector3 force, Vector3 worldPoint) {
+        void addForceAtPoint(Vector3 force, Vector3 offsetFromCenter) {
             if (bodyType != BodyType::DYNAMIC) return;
             addForce(force);
-            
-            Vector3 r = Vector3Subtract(worldPoint, state.position);
-            Vector3 torque = Vector3CrossProduct(r, force);
+            Vector3 torque = Vector3CrossProduct(offsetFromCenter, force);
             addTorque(torque);
         }
         void addTorque(Vector3 torque) {
@@ -165,21 +179,16 @@ namespace inert {
         //                  SETTERS
         // ==========================================
         
-        void setPosition(Vector3 Pos) { state.position = Pos; }
-        void move(Vector3 deltaPos) { state.position = Vector3Add(state.position, deltaPos); }
-        void setRestitution(float bounciness) { state.restitution = bounciness; }
-        void setLinearDamping(float friction) { /* TODO: state.linearFriction = friction; */ }
-        void setVelocity(Vector3 v) { 
-            if (bodyType == BodyType::DYNAMIC) state.velocity = v; 
-        }
-        void setAngularVelocity(Vector3 w) { 
-            if (bodyType == BodyType::DYNAMIC) state.rotatVel = w; 
-        }
-        void setMass(float m) { 
-            state.mass = m; 
-            state.inverseMass = (m > 0.0f) ? (1.0f / m) : 0.0f; 
-        }
-        void setInertia(Vector3 newInertia) {
+        void setPosition(Vector3 Pos)           { state.position = Pos; }
+        // void move(Vector3 deltaPos)             { state.position = Vector3Add(state.position, deltaPos); } // TODO
+        void translate(Vector3 deltaPos)        { state.position = Vector3Add(state.position, deltaPos); }
+        void setRestitution(float bounciness)   { state.restitution = bounciness; }
+        void setLinearDamping(float friction)   { /* TODO: state.linearFriction = friction; */ }
+        void setVelocity(Vector3 v)             { if (bodyType == BodyType::DYNAMIC) state.velocity = v; }
+        void setAngularVelocity(Vector3 w)      { if (bodyType == BodyType::DYNAMIC) state.rotatVel = w; }
+        void setMass(float m)                   { state.mass = m; state.inverseMass = (m > 0.0f) ? (1.0f / m) : 0.0f; }
+        void setOrientation(Quaternion q)       { if (bodyType == BodyType::DYNAMIC) state.orientation = QuaternionNormalize(q); }
+        void setInertia(Vector3 newInertia)     {
             state.inertia = newInertia;
             state.inverseInertia = {
                 (newInertia.x > 0.0001f) ? 1.0f / newInertia.x : 0.0f,
@@ -187,6 +196,8 @@ namespace inert {
                 (newInertia.z > 0.0001f) ? 1.0f / newInertia.z : 0.0f
             };
         }
+
+
 
         // ==========================================
         //         HITBOX & COLLIDER SYSTEM
@@ -261,11 +272,40 @@ namespace inert {
         void applyImpulse(Vector3 contactVector, Vector3 impulse) {
             state.velocity = Vector3Add(state.velocity, Vector3Scale(impulse, state.inverseMass));
 
-            Vector3 torqueImpulse = Vector3CrossProduct(contactVector, impulse);
+            Vector3 worldTorqueImpulse = Vector3CrossProduct(contactVector, impulse);
             
-            state.rotatVel.x += torqueImpulse.x * state.inverseInertia.x;
-            state.rotatVel.y += torqueImpulse.y * state.inverseInertia.y;
-            state.rotatVel.z += torqueImpulse.z * state.inverseInertia.z;
+            Quaternion invOrientation = QuaternionInvert(state.orientation);
+            Vector3 localTorque = Vector3RotateByQuaternion(worldTorqueImpulse, invOrientation);
+            
+            Vector3 localRotVelDelta = {
+                localTorque.x * state.inverseInertia.x,
+                localTorque.y * state.inverseInertia.y,
+                localTorque.z * state.inverseInertia.z
+            };
+            
+            Vector3 worldRotVelDelta = Vector3RotateByQuaternion(localRotVelDelta, state.orientation);
+            
+            state.rotatVel = Vector3Add(state.rotatVel, worldRotVelDelta);
+        }
+
+        void applyImpulseAtPoint(Vector3 impulse, Vector3 offsetFromCenter) {
+            if (bodyType != BodyType::DYNAMIC) return;
+            
+            state.velocity = Vector3Add(state.velocity, Vector3Scale(impulse, state.inverseMass));
+            
+            Vector3 torqueImpulse = Vector3CrossProduct(offsetFromCenter, impulse);
+            
+            Quaternion invOrientation = QuaternionInvert(state.orientation);
+            Vector3 localTorque = Vector3RotateByQuaternion(torqueImpulse, invOrientation);
+            
+            Vector3 localRotVelDelta = {
+                localTorque.x * state.inverseInertia.x,
+                localTorque.y * state.inverseInertia.y,
+                localTorque.z * state.inverseInertia.z
+            };
+            
+            Vector3 worldRotVelDelta = Vector3RotateByQuaternion(localRotVelDelta, state.orientation);
+            state.rotatVel = Vector3Add(state.rotatVel, worldRotVelDelta);
         }
 
         // Main Collision
@@ -314,15 +354,47 @@ namespace inert {
         }
 
         // Coulomb friction state fn
-        FrictionState determineFrictionState(float requiredTangentImpulse, float normalImpulseMag, float muStatic) {
-            if (abs(requiredTangentImpulse) < normalImpulseMag * muStatic)
+        FrictionState determineFrictionState(float requiredTangentImpulse, float normalImpulseMag) {
+            if (abs(requiredTangentImpulse) < normalImpulseMag * state.muStatic)
                 return FrictionState::STATIC;
             return FrictionState::KINETIC;
         }
 
         // Tangent Collision
         void resolveTangentCollision(Vector3 r, Vector3 normal, Vector3 pointVelocity, float normalImpulseMag) {
-            // TODO: 
+            float velAlongNormal = Vector3DotProduct(pointVelocity, normal);
+            Vector3 normalVelocity = Vector3Scale(normal, velAlongNormal);
+            Vector3 tangentVelocity = Vector3Subtract(pointVelocity, normalVelocity);
+
+            float tangentSpeed = Vector3Length(tangentVelocity);
+            if (tangentSpeed < 0.0001f) return;
+
+            Vector3 t = Vector3Scale(tangentVelocity, 1.0f / tangentSpeed);
+            Vector3 rCrossT = Vector3CrossProduct(r, t);
+            
+            Quaternion qRot = state.orientation;
+            Quaternion invOrientation = QuaternionInvert(qRot); 
+            Vector3 rCrossT_local = Vector3RotateByQuaternion(rCrossT, invOrientation);
+
+            Vector3 invI_crossRT_local = { 
+                rCrossT_local.x * state.inverseInertia.x, 
+                rCrossT_local.y * state.inverseInertia.y, 
+                rCrossT_local.z * state.inverseInertia.z 
+            };
+
+            Vector3 invI_crossRT = Vector3RotateByQuaternion(invI_crossRT_local, qRot);
+            Vector3 cross_invI_crossRT_r = Vector3CrossProduct(invI_crossRT, r);
+            
+            float angularEffect = Vector3DotProduct(cross_invI_crossRT_r, t);
+            float jt = -tangentSpeed / (state.inverseMass + angularEffect);
+
+            FrictionState fricState = determineFrictionState(jt, normalImpulseMag);
+
+            Vector3 frictionImpulse;
+            if (fricState == FrictionState::STATIC) frictionImpulse = Vector3Scale(t, jt);
+            else frictionImpulse = Vector3Scale(t, -normalImpulseMag * state.muKinetic);
+
+            applyImpulse(r, frictionImpulse);
         }
     };
 }
