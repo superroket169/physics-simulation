@@ -10,8 +10,8 @@
 namespace inert {
 
     const float GRAVITY_FORCE = 9.81f;
-    const float frictionTurn  = 0.98f;
-    const float frictionMove  = 0.98f;
+    const float frictionTurn  =  0.98f;
+    const float frictionMove  =  0.98f;
 
     const float jitterCutoffLinear = 0.1f;
     const float jitterCutoffAngular = 0.1f;
@@ -109,30 +109,6 @@ namespace inert {
             }
         }
 
-        // TODO: now just ground colisions
-        void applyCollisions() {
-            if (!hasGroundCollision) return;
-
-            float maxPenetration = 0.0f;
-
-            for (const auto& collider : colliders) {
-                if (collider.type == ColliderType::POINT_CLOUD) {
-                    for (const auto& localPt : collider.localPoints) {
-                        Vector3 worldPoint = Vector3Add(state.position, Vector3Transform(localPt, QuaternionToMatrix(state.orientation)));
-                        
-                        if (worldPoint.y < groundLevel) {
-                            resolveCollision(worldPoint, { 0.0f, 1.0f, 0.0f });
-                            
-                            float penetration = groundLevel - worldPoint.y;
-                            if (penetration > maxPenetration) maxPenetration = penetration;
-                        }
-                    }
-                }
-            }
-            
-            if (maxPenetration > 0.0f) state.position.y += maxPenetration;
-        }
-
     public:
         PhysicsBody() {}
         virtual ~PhysicsBody() {}
@@ -151,6 +127,17 @@ namespace inert {
 
         bool getAngularActivity() { return angularActivity; }
         bool getLinearActivity() { return linearActivity; }
+
+        const std::vector<Collider>& getColliders() const { return colliders; }
+        const PhysicsState& getState() const { return state; }
+        float getRestitution() const { return state.restitution; }
+        BodyType getBodyType() const { return bodyType; }
+
+        Vector3 getVelocityAtPoint(Vector3 point) const {
+            Vector3 r = Vector3Subtract(point, state.position);
+            Vector3 angularVelEffect = Vector3CrossProduct(state.rotatVel, r);
+            return Vector3Add(state.velocity, angularVelEffect);
+        }
         
         // ==========================================
         //                  ADDERS
@@ -197,16 +184,9 @@ namespace inert {
             };
         }
 
-
-
         // ==========================================
         //         HITBOX & COLLIDER SYSTEM
         // ==========================================
-        
-        void addGround(float y_level) {
-            hasGroundCollision = true;
-            groundLevel = y_level;
-        }
 
         // for box & sphere
         void addCollider(ColliderType mode, Vector3 dimensions) {
@@ -239,7 +219,6 @@ namespace inert {
                 integrateAngular(deltaTime);
             }
 
-            applyCollisions();
             clearAccumulators();
         }
 
@@ -288,113 +267,25 @@ namespace inert {
             state.rotatVel = Vector3Add(state.rotatVel, worldRotVelDelta);
         }
 
-        void applyImpulseAtPoint(Vector3 impulse, Vector3 offsetFromCenter) {
+        void applyImpulseAtPoint(Vector3 impulse, Vector3 point) {
             if (bodyType != BodyType::DYNAMIC) return;
-            
+    
+            Vector3 r = Vector3Subtract(point, state.position);
+    
             state.velocity = Vector3Add(state.velocity, Vector3Scale(impulse, state.inverseMass));
-            
-            Vector3 torqueImpulse = Vector3CrossProduct(offsetFromCenter, impulse);
-            
+    
+            Vector3 torqueImpulse = Vector3CrossProduct(r, impulse);
             Quaternion invOrientation = QuaternionInvert(state.orientation);
             Vector3 localTorque = Vector3RotateByQuaternion(torqueImpulse, invOrientation);
-            
+    
             Vector3 localRotVelDelta = {
                 localTorque.x * state.inverseInertia.x,
                 localTorque.y * state.inverseInertia.y,
                 localTorque.z * state.inverseInertia.z
             };
-            
+    
             Vector3 worldRotVelDelta = Vector3RotateByQuaternion(localRotVelDelta, state.orientation);
             state.rotatVel = Vector3Add(state.rotatVel, worldRotVelDelta);
-        }
-
-        // Main Collision
-        void resolveCollision(Vector3 hitPoint, Vector3 normal) {
-            Vector3 r = Vector3Subtract(hitPoint, state.position);
-            Vector3 pointVelocity = Vector3Add(state.velocity, Vector3CrossProduct(state.rotatVel, r));
-
-            float velAlongNormal = Vector3DotProduct(pointVelocity, normal);
-            if (velAlongNormal > 0) return; 
-
-            float normalImpulseMag = resolveNormalCollision(r, normal, pointVelocity, velAlongNormal);
-
-            Vector3 newPointVelocity = Vector3Add(state.velocity, Vector3CrossProduct(state.rotatVel, r));
-            
-            resolveTangentCollision(r, normal, newPointVelocity, normalImpulseMag);
-        }
-
-        // Vertical
-        float resolveNormalCollision(Vector3 r, Vector3 normal, Vector3 pointVelocity, float velAlongNormal) {
-
-            Vector3 rCrossN = Vector3CrossProduct(r, normal);
-
-            Quaternion qRot = state.orientation;
-
-            Quaternion invOrientation = QuaternionInvert(qRot); 
-            Vector3 rCrossN_local = Vector3RotateByQuaternion(rCrossN, invOrientation);
-
-            Vector3 invI_crossRN_local = { 
-                rCrossN_local.x / state.inertia.x, 
-                rCrossN_local.y / state.inertia.y, 
-                rCrossN_local.z / state.inertia.z 
-            };
-
-            Vector3 invI_crossRN = Vector3RotateByQuaternion(invI_crossRN_local, qRot);
-            Vector3 cross_invI_crossRN_r = Vector3CrossProduct(invI_crossRN, r);
-            
-            float angularEffect = Vector3DotProduct(cross_invI_crossRN_r, normal);
-            
-            float j = -(1.0f + state.restitution) * velAlongNormal;
-            j /= state.inverseMass + angularEffect;
-
-            Vector3 impulse = Vector3Scale(normal, j);
-            applyImpulse(r, impulse);
-
-            return j;
-        }
-
-        // Coulomb friction state fn
-        FrictionState determineFrictionState(float requiredTangentImpulse, float normalImpulseMag) {
-            if (abs(requiredTangentImpulse) < normalImpulseMag * state.muStatic)
-                return FrictionState::STATIC;
-            return FrictionState::KINETIC;
-        }
-
-        // Tangent Collision
-        void resolveTangentCollision(Vector3 r, Vector3 normal, Vector3 pointVelocity, float normalImpulseMag) {
-            float velAlongNormal = Vector3DotProduct(pointVelocity, normal);
-            Vector3 normalVelocity = Vector3Scale(normal, velAlongNormal);
-            Vector3 tangentVelocity = Vector3Subtract(pointVelocity, normalVelocity);
-
-            float tangentSpeed = Vector3Length(tangentVelocity);
-            if (tangentSpeed < 0.0001f) return;
-
-            Vector3 t = Vector3Scale(tangentVelocity, 1.0f / tangentSpeed);
-            Vector3 rCrossT = Vector3CrossProduct(r, t);
-            
-            Quaternion qRot = state.orientation;
-            Quaternion invOrientation = QuaternionInvert(qRot); 
-            Vector3 rCrossT_local = Vector3RotateByQuaternion(rCrossT, invOrientation);
-
-            Vector3 invI_crossRT_local = { 
-                rCrossT_local.x * state.inverseInertia.x, 
-                rCrossT_local.y * state.inverseInertia.y, 
-                rCrossT_local.z * state.inverseInertia.z 
-            };
-
-            Vector3 invI_crossRT = Vector3RotateByQuaternion(invI_crossRT_local, qRot);
-            Vector3 cross_invI_crossRT_r = Vector3CrossProduct(invI_crossRT, r);
-            
-            float angularEffect = Vector3DotProduct(cross_invI_crossRT_r, t);
-            float jt = -tangentSpeed / (state.inverseMass + angularEffect);
-
-            FrictionState fricState = determineFrictionState(jt, normalImpulseMag);
-
-            Vector3 frictionImpulse;
-            if (fricState == FrictionState::STATIC) frictionImpulse = Vector3Scale(t, jt);
-            else frictionImpulse = Vector3Scale(t, -normalImpulseMag * state.muKinetic);
-
-            applyImpulse(r, frictionImpulse);
         }
     };
 }
