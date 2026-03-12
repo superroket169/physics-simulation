@@ -13,8 +13,8 @@ namespace inert {
     const float frictionTurn  =  0.98f;
     const float frictionMove  =  0.98f;
 
-    const float jitterCutoffLinear = 0.1f;
-    const float jitterCutoffAngular = 0.1f;
+    const float jitterCutoffLinear = 0.001f;
+    const float jitterCutoffAngular = 0.001f;
     
     enum class BodyType { STATIC, DYNAMIC, KINEMATIC };
     enum class FrictionState { NONE, STATIC, KINETIC };
@@ -42,7 +42,7 @@ namespace inert {
         float restitution = 0.4f;
 
         float muStatic = 0.90f;
-        float muKinetic = 0.20f;
+        float muKinetic = 0.80f;
 
         // Accumulators
         Vector3 forceAccum = { 0.0f, 0.0f, 0.0f };
@@ -267,25 +267,26 @@ namespace inert {
             state.rotatVel = Vector3Add(state.rotatVel, worldRotVelDelta);
         }
 
-        void applyImpulseAtPoint(Vector3 impulse, Vector3 point) {
-            if (bodyType != BodyType::DYNAMIC) return;
-    
-            Vector3 r = Vector3Subtract(point, state.position);
-    
-            state.velocity = Vector3Add(state.velocity, Vector3Scale(impulse, state.inverseMass));
-    
-            Vector3 torqueImpulse = Vector3CrossProduct(r, impulse);
-            Quaternion invOrientation = QuaternionInvert(state.orientation);
-            Vector3 localTorque = Vector3RotateByQuaternion(torqueImpulse, invOrientation);
-    
-            Vector3 localRotVelDelta = {
-                localTorque.x * state.inverseInertia.x,
-                localTorque.y * state.inverseInertia.y,
-                localTorque.z * state.inverseInertia.z
+        void applyImpulseAtPoint(Vector3 impulse, Vector3 contactPoint) {
+            if (bodyType == BodyType::STATIC) return;
+
+            Vector3 r = Vector3Subtract(contactPoint, state.position);
+            
+            Vector3 velocityChange = Vector3Scale(impulse, state.inverseMass);
+            state.velocity = Vector3Add(state.velocity, velocityChange);
+            
+            Vector3 angularImpulse = Vector3CrossProduct(r, impulse);
+            
+            Vector3 rotatVelChange = {
+                angularImpulse.x * state.inverseInertia.x,
+                angularImpulse.y * state.inverseInertia.y,
+                angularImpulse.z * state.inverseInertia.z
             };
-    
-            Vector3 worldRotVelDelta = Vector3RotateByQuaternion(localRotVelDelta, state.orientation);
-            state.rotatVel = Vector3Add(state.rotatVel, worldRotVelDelta);
+            
+            state.rotatVel = Vector3Add(state.rotatVel, rotatVelChange);
+
+            linearActivity = true;
+            angularActivity = true;
         }
     };
 }

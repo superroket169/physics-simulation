@@ -67,6 +67,7 @@ int main() {
         if (IsKeyDown(KEY_A)) force.x -= movePower;
         if (IsKeyDown(KEY_D)) force.x += movePower;
         if (IsKeyPressed(KEY_SPACE)) player->applyImpulseAtPoint({0.0f, 40.0f, 0.0f}, player->getPosition());
+        if (IsKeyPressed(KEY_E)) player->addTorque({0.f, 1000.f, 0.f});
 
         player->addForce(force);
 

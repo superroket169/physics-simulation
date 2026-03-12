@@ -2,7 +2,6 @@
 #define COLLISION_HPP
 
 #include <vector>
-#include <algorithm>
 #include <unordered_map>
 #include "raylib.h"
 #include "raymath.h"
@@ -11,160 +10,199 @@
 
 namespace inert {
 
-    // --- PHYSICS WORLD ---
+    class SpatialHash {
+    private:
+        float cellSize;
+        std::unordered_map<int, std::vector<PhysicsBody*>> grid;
+
+        inline int getHash(Vector3 pos) {
+            int cx = (int)floor(pos.x / cellSize);
+            int cy = (int)floor(pos.y / cellSize);
+            int cz = (int)floor(pos.z / cellSize);
+            return (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791);
+        }
+
+    public:
+        SpatialHash(float size = 3.0f) : cellSize(size) {}
+        
+        void setCellSize(float size) { cellSize = size; }
+
+        void update(const std::vector<PhysicsBody*>& bodies) {
+            grid.clear(); 
+            for (auto body : bodies) {
+                grid[getHash(body->getPosition())].push_back(body);
+            }
+        }
+
+        std::vector<PhysicsBody*> getNeighbors(PhysicsBody* body) {
+            std::vector<PhysicsBody*> neighbors;
+            Vector3 pos = body->getPosition();
+            
+            int cx = (int)floor(pos.x / cellSize);
+            int cy = (int)floor(pos.y / cellSize);
+            int cz = (int)floor(pos.z / cellSize);
+
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        int h = ((cx + dx) * 73856093) ^ ((cy + dy) * 19349663) ^ ((cz + dz) * 83492791);
+                        auto it = grid.find(h);
+                        if (it != grid.end()) {
+                            for (auto b : it->second) {
+                                if (b != body) neighbors.push_back(b);
+                            }
+                        }
+                    }
+                }
+            }
+            return neighbors;
+        }
+    };
+
+
     class PhysicsWorld {
     private:
         std::vector<PhysicsBody*> bodies;
+        SpatialHash spatialHash;
+        
         bool hasGroundCollision = false;
         float groundLevel = 0.0f;
         
+        PhysicsState groundState;
+
+        void integrateForces(float dt) {
+            for (auto body : bodies) {
+                if (body->getBodyType() == BodyType::DYNAMIC) {
+                    body->addForce({ 0.0f, body->getMass() * settings.gravityY, 0.0f });
+                }
+                body->updateBody(dt); 
+            }
+        }
+
+        void handleGroundCollisions() {
+            if (!hasGroundCollision) return;
+
+            for (auto body : bodies) {
+                for (const auto& collider : body->getColliders()) {
+                    if (collider.type == ColliderType::SPHERE) {
+                        float radius = collider.size.x;
+                        float lowestPoint = body->getPosition().y - radius;
+                        
+                        if (lowestPoint < groundLevel) {
+                            CollisionManifold m;
+                            m.isColliding = true;
+                            m.normal = { 0.0f, -1.0f, 0.0f }; 
+                            m.depth = groundLevel - lowestPoint;
+                            m.contactPoint = { body->getPosition().x, groundLevel, body->getPosition().z };
+
+                            PositionalCorrectionResult posRes = 
+                                PureMath::calculatePositionalCorrection(body->getState(), groundState, m, settings);
+                            if (posRes.shouldCorrect) body->translate(posRes.translationA);
+
+                            NormalImpulseResult normRes = 
+                                PureMath::calculateNormalImpulse(body->getState(), groundState, body->getRestitution(), 1.0f, m);
+                            
+                            if (normRes.shouldApply) {
+                                body->applyImpulseAtPoint(Vector3Scale(normRes.impulse, -1.0f), m.contactPoint);
+                            }
+
+                            Vector3 tangentImpulse = 
+                                PureMath::calculateTangentImpulse(body->getState(), groundState, m, normRes.magnitude, settings);
+                            body->applyImpulseAtPoint(Vector3Scale(tangentImpulse, -1.0f), m.contactPoint);
+                        }
+                    }
+                    else if (collider.type == ColliderType::POINT_CLOUD) {
+                        for (const auto& localPt : collider.localPoints) {
+                            Vector3 worldPoint = 
+                                Vector3Add(body->getPosition(), Vector3Transform(localPt, QuaternionToMatrix(body->getState().orientation)));
+                            
+                            if (worldPoint.y < groundLevel) {
+                                CollisionManifold m;
+                                m.isColliding = true;
+                                m.normal = { 0.0f, -1.0f, 0.0f };
+                                m.depth = groundLevel - worldPoint.y;
+                                m.contactPoint = worldPoint;
+
+                                PositionalCorrectionResult posRes = 
+                                    PureMath::calculatePositionalCorrection(body->getState(), groundState, m, settings);
+                                if (posRes.shouldCorrect) body->translate(posRes.translationA);
+
+                                NormalImpulseResult normRes = 
+                                    PureMath::calculateNormalImpulse(body->getState(), groundState, body->getRestitution(), 1.0f, m);
+                                if (normRes.shouldApply) {
+                                    body->applyImpulseAtPoint(Vector3Scale(normRes.impulse, -1.0f), m.contactPoint);
+                                }
+
+                                Vector3 tangentImpulse = 
+                                    PureMath::calculateTangentImpulse(body->getState(), groundState, m, normRes.magnitude, settings);
+                                body->applyImpulseAtPoint(Vector3Scale(tangentImpulse, -1.0f), m.contactPoint);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        void handleBodyCollisions() {
+            for (auto bodyA : bodies) {
+                auto neighbors = spatialHash.getNeighbors(bodyA);
+                for (auto bodyB : neighbors) {
+                    if (bodyA >= bodyB) continue; 
+
+                    for (const auto& colA : bodyA->getColliders()) {
+                        for (const auto& colB : bodyB->getColliders()) {
+                            if (colA.type == ColliderType::SPHERE && colB.type == ColliderType::SPHERE) {
+                                CollisionManifold m = PureMath::checkSphereSphere(bodyA->getState(), colA.size.x, bodyB->getState(), colB.size.x, settings);
+                                
+                                if (m.isColliding) {
+                                    PositionalCorrectionResult posRes = PureMath::calculatePositionalCorrection(bodyA->getState(), bodyB->getState(), m, settings);
+                                    if (posRes.shouldCorrect) {
+                                        bodyA->translate(posRes.translationA);
+                                        bodyB->translate(posRes.translationB);
+                                    }
+
+                                    NormalImpulseResult normRes = PureMath::calculateNormalImpulse(bodyA->getState(), bodyB->getState(), bodyA->getRestitution(), bodyB->getRestitution(), m);
+                                    if (normRes.shouldApply) {
+                                        bodyA->applyImpulseAtPoint(Vector3Scale(normRes.impulse, -1.0f), m.contactPoint);
+                                        bodyB->applyImpulseAtPoint(normRes.impulse, m.contactPoint);
+                                    }
+
+                                    Vector3 tangentImpulse = PureMath::calculateTangentImpulse(bodyA->getState(), bodyB->getState(), m, normRes.magnitude, settings);
+                                    bodyA->applyImpulseAtPoint(Vector3Scale(tangentImpulse, -1.0f), m.contactPoint);
+                                    bodyB->applyImpulseAtPoint(tangentImpulse, m.contactPoint);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
     public:
-        PhysicsSettings settings;
+        PhysicsSettings settings; 
+
+        PhysicsWorld() {
+            groundState.inverseMass = 0.0f;
+            groundState.inverseInertia = { 0.0f, 0.0f, 0.0f };
+            groundState.velocity = { 0.0f, 0.0f, 0.0f };
+            groundState.rotatVel = { 0.0f, 0.0f, 0.0f };
+        }
 
         void addObject(PhysicsBody* body) { bodies.push_back(body); }
         void addGround(float y_level) { hasGroundCollision = true; groundLevel = y_level; }
 
         void step(float dt) {
+            integrateForces(dt);
 
-            // gravity update
-            for (auto body : bodies) {
-                if (body->getBodyType() == BodyType::DYNAMIC)
-                    body->addForce({ 0.0f, body->getMass() * settings.gravityY, 0.0f });
-                body->updateBody(dt);
-            }
+            spatialHash.setCellSize(settings.spatialCellSize);
+            spatialHash.update(bodies);
 
-            std::unordered_map<int, std::vector<PhysicsBody*>> grid;
-            
-            for (auto body : bodies) {
-                int cx = (int)floor(body->getPosition().x / settings.spatialCellSize);
-                int cy = (int)floor(body->getPosition().y / settings.spatialCellSize);
-                int cz = (int)floor(body->getPosition().z / settings.spatialCellSize);
-                int hash = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791);
-                grid[hash].push_back(body);
-            }
-
-            // iterative solver
             for (int k = 0; k < settings.solverIterations; k++) {
-                
-                // ground collisions
-                for (auto body : bodies) {
-                    if (!hasGroundCollision) continue;
-                    
-                    for (const auto& collider : body->getColliders()) {
-                        if (collider.type == ColliderType::SPHERE) {
-                            float radius = collider.size.x;
-                            float lowestPoint = body->getPosition().y - radius;
-                            
-                            if (lowestPoint < groundLevel) {
-                                float penetration = groundLevel - lowestPoint;
-                                body->translate({ 0.0f, penetration, 0.0f });
-                                
-                                Vector3 contactPoint = { body->getPosition().x, groundLevel, body->getPosition().z };
-                                Vector3 normal = { 0.0f, 1.0f, 0.0f };
-                                Vector3 r = Vector3Subtract(contactPoint, body->getPosition()); 
-
-                                Vector3 velAtContact = body->getVelocityAtPoint(contactPoint);
-                                float velAlongNormal = Vector3DotProduct(velAtContact, normal);
-                                
-                                if (velAlongNormal <= 0) {
-                                    float angularEffect = PureMath::calculateAngularEffect(body->getState(), r, normal);
-                                    float e = body->getRestitution();
-                                    if (abs(velAlongNormal) < settings.bounceThreshold) e = 0.0f; 
-
-                                    float j = -(1.0f + e) * velAlongNormal;
-                                    j /= (body->getState().inverseMass + angularEffect);
-                                    
-                                    Vector3 impulse = Vector3Scale(normal, j);
-                                    body->applyImpulseAtPoint(impulse, contactPoint);
-                                    
-                                    // Zemin Sürtünmesi
-                                    Vector3 newVelAtContact = body->getVelocityAtPoint(contactPoint);
-                                    float newVelAlongNormal = Vector3DotProduct(newVelAtContact, normal);
-                                    Vector3 normalVelocity = Vector3Scale(normal, newVelAlongNormal);
-                                    Vector3 tangentVelocity = Vector3Subtract(newVelAtContact, normalVelocity);
-                                    
-                                    float tangentSpeed = Vector3Length(tangentVelocity);
-                                    if (tangentSpeed >= settings.velocityEpsilon) {
-                                        Vector3 t = Vector3Scale(tangentVelocity, 1.0f / tangentSpeed);
-                                        float angularEffectT = PureMath::calculateAngularEffect(body->getState(), r, t);
-                                        float jt = -tangentSpeed / (body->getState().inverseMass + angularEffectT);
-                                        float maxFriction = j * settings.baseFrictionMu;
-                                        jt = Clamp(jt, -maxFriction, maxFriction); 
-                                        
-                                        body->applyImpulseAtPoint(Vector3Scale(t, jt), contactPoint);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // object to object collisions
-                for (auto bodyA : bodies) {
-                    int cx = (int)floor(bodyA->getPosition().x / settings.spatialCellSize);
-                    int cy = (int)floor(bodyA->getPosition().y / settings.spatialCellSize);
-                    int cz = (int)floor(bodyA->getPosition().z / settings.spatialCellSize);
-
-                    for (int dx = -1; dx <= 1; dx++) {
-                        for (int dy = -1; dy <= 1; dy++) {
-                            for (int dz = -1; dz <= 1; dz++) {
-                                
-                                int neighborHash = ((cx + dx) * 73856093) ^ ((cy + dy) * 19349663) ^ ((cz + dz) * 83492791);
-                                auto it = grid.find(neighborHash);
-                                
-                                if (it != grid.end()) {
-                                    for (auto bodyB : it->second) {
-                                        if (bodyA >= bodyB) continue; 
-                                        
-                                        for (const auto& colA : bodyA->getColliders()) {
-                                            for (const auto& colB : bodyB->getColliders()) {
-                                                if (colA.type == ColliderType::SPHERE && colB.type == ColliderType::SPHERE) {
-                                                    
-                                                    CollisionManifold m = PureMath::checkSphereSphere(bodyA->getState(),
-                                                            colA.size.x, bodyB->getState(), colB.size.x, settings);
-                                                    
-                                                    if (m.isColliding) {
-                                                        resolveCollision(bodyA, bodyB, m);
-                                                        applyPositionalCorrection(bodyA, bodyB, m);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ------ IMPERATIVE SHELL ------
-
-        void applyPositionalCorrection(PhysicsBody* a, PhysicsBody* b, const CollisionManifold& m) {
-            PositionalCorrectionResult res = 
-                PureMath::calculatePositionalCorrection(a->getState(), b->getState(), m, settings);
-            
-            if (res.shouldCorrect) {
-                a->translate(res.translationA);
-                b->translate(res.translationB);
-            }
-        }
-
-        void resolveCollision(PhysicsBody* a, PhysicsBody* b, const CollisionManifold& m) {
-            NormalImpulseResult normRes = 
-                PureMath::calculateNormalImpulse(a->getState(), b->getState(), a->getRestitution(), b->getRestitution(), m);
-            
-            if (normRes.shouldApply) {
-                a->applyImpulseAtPoint(Vector3Scale(normRes.impulse, -1.0f), m.contactPoint);
-                b->applyImpulseAtPoint(normRes.impulse, m.contactPoint);
-                
-                Vector3 tangentImpulse = PureMath::calculateTangentImpulse(a->getState(), b->getState(), m, normRes.magnitude, settings);
-                
-                a->applyImpulseAtPoint(Vector3Scale(tangentImpulse, -1.0f), m.contactPoint);
-                b->applyImpulseAtPoint(tangentImpulse, m.contactPoint);
+                handleGroundCollisions();
+                handleBodyCollisions();
             }
         }
     };
 }
+
 #endif

@@ -14,7 +14,7 @@ namespace inert {
         float spatialCellSize = 3.0f;
         float distanceEpsilon = 0.0001f;
         float velocityEpsilon = 0.001f;
-        float bounceThreshold = 1.0f;
+        float bounceThreshold = 0.2f;
         float baseFrictionMu = 0.5f;
         float baumgartePercent = 0.8f;
         float baumgarteSlop = 0.01f;
@@ -152,13 +152,19 @@ namespace inert {
             float totalInvMass = stateA.inverseMass + stateB.inverseMass;
             
             float jt = -tangentSpeed / (totalInvMass + angularEffectA + angularEffectB);
-            float maxFriction = normalImpulseMag * settings.baseFrictionMu;
             
+            float effectiveNormal = normalImpulseMag;
+            float massA = stateA.inverseMass > 0.0f ? (1.0f / stateA.inverseMass) : 0.0f;
+            float restingImpulse = massA * abs(settings.gravityY) * 0.016f; // m * g * dt (Yaklaşık)
+            // çok özür ama sonradan tüm katsayıları değiştirilebilir yapacağım
+            
+            if (effectiveNormal < restingImpulse) effectiveNormal = restingImpulse;
+
+            float maxFriction = effectiveNormal * settings.baseFrictionMu;
             jt = Clamp(jt, -maxFriction, maxFriction);
             
             return Vector3Scale(t, jt);
         }
-
     }
 }
 
