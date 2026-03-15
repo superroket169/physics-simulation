@@ -109,6 +109,20 @@ namespace inert {
             }
         }
 
+        void applyAngularImpulse(Vector3 torqueImpulse) {
+            Quaternion invOrientation = QuaternionInvert(state.orientation);
+            Vector3 localTorque = Vector3RotateByQuaternion(torqueImpulse, invOrientation);
+            
+            Vector3 localDelta = {
+                localTorque.x * state.inverseInertia.x,
+                localTorque.y * state.inverseInertia.y,
+                localTorque.z * state.inverseInertia.z
+            };
+        
+            state.rotatVel = Vector3Add(state.rotatVel,
+            Vector3RotateByQuaternion(localDelta, state.orientation));
+        }
+
     public:
         PhysicsBody() {}
         virtual ~PhysicsBody() {}
@@ -213,8 +227,6 @@ namespace inert {
             if (bodyType == BodyType::STATIC) return; 
 
             if (bodyType == BodyType::DYNAMIC) {
-                addForce({ 0.0f, -GRAVITY_FORCE * state.mass, 0.0f });
-
                 integrateLinear(deltaTime);
                 integrateAngular(deltaTime);
             }
@@ -272,18 +284,8 @@ namespace inert {
 
             Vector3 r = Vector3Subtract(contactPoint, state.position);
             
-            Vector3 velocityChange = Vector3Scale(impulse, state.inverseMass);
-            state.velocity = Vector3Add(state.velocity, velocityChange);
-            
-            Vector3 angularImpulse = Vector3CrossProduct(r, impulse);
-            
-            Vector3 rotatVelChange = {
-                angularImpulse.x * state.inverseInertia.x,
-                angularImpulse.y * state.inverseInertia.y,
-                angularImpulse.z * state.inverseInertia.z
-            };
-            
-            state.rotatVel = Vector3Add(state.rotatVel, rotatVelChange);
+            state.velocity = Vector3Add(state.velocity, Vector3Scale(impulse, state.inverseMass));
+            applyAngularImpulse(Vector3CrossProduct(r, impulse));
 
             linearActivity = true;
             angularActivity = true;

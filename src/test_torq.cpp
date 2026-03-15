@@ -50,29 +50,41 @@ int main() {
     topac->addCollider(inert::ColliderType::POINT_CLOUD, pcPoints);
 
     world.addObject(topac);
-
+    float tf = 300.0f;
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
-
-        // --- KONTROLLER ---
-        
-        // E Tusu: Sürekli Tork Uygula (Motor gibi kendi etrafında hızlanarak döner)
         if (IsKeyDown(KEY_E)) {
-            topac->addTorque({ 0.0f, 150.0f, 0.0f }); 
+            topac->addTorque({ 0.0f, tf, 0.0f }); 
         }
 
-        // Q Tusu: Ters Tork Uygula (Frenleme / Tersine dönüş)
         if (IsKeyDown(KEY_Q)) {
-            topac->addTorque({ 0.0f, -150.0f, 0.0f });
+            topac->addTorque({ 0.0f, -tf, 0.0f });
+        
         }
 
-        // WASD: Yere temas halindeyken itki uygula ki yuvarlanmayı görelim
+        if (IsKeyDown(KEY_UP)) {
+            topac->addTorque({ -tf, 0.0f, 0.0f }); 
+        }
+
+        if (IsKeyDown(KEY_DOWN)) {
+            topac->addTorque({ tf, 0.0f, 0.0f });
+        }
+
+
+        if (IsKeyDown(KEY_LEFT)) {
+            topac->addTorque({ 0.0f, 0.0f, tf }); 
+        }
+
+        if (IsKeyDown(KEY_RIGHT)) {
+            topac->addTorque({ 0.0f, 0.0f, -tf });
+        }
+
         Vector3 impulse = { 0.0f, 0.0f, 0.0f };
-        float movePower = 20.0f;
-        if (IsKeyPressed(KEY_W)) impulse.z -= movePower;
-        if (IsKeyPressed(KEY_S)) impulse.z += movePower;
-        if (IsKeyPressed(KEY_A)) impulse.x -= movePower;
-        if (IsKeyPressed(KEY_D)) impulse.x += movePower;
+        float movePower = 2.0f;
+        if (IsKeyDown(KEY_W)) impulse.z -= movePower;
+        if (IsKeyDown(KEY_S)) impulse.z += movePower;
+        if (IsKeyDown(KEY_A)) impulse.x -= movePower;
+        if (IsKeyDown(KEY_D)) impulse.x += movePower;
         
         if (Vector3Length(impulse) > 0.0f) {
             // İtkiyi tam kütle merkezinden uyguluyoruz (saf öteleme)
@@ -80,12 +92,12 @@ int main() {
         }
 
         // SPACE: Zıplama
-        if (IsKeyPressed(KEY_SPACE)) {
-            topac->applyImpulseAtPoint({ 0.0f, 50.0f, 0.0f }, topac->getPosition());
+        if (IsKeyDown(KEY_SPACE)) {
+            topac->applyImpulseAtPoint({ 0.0f, 5.0f, 0.0f }, topac->getPosition());
         }
 
         // T: İleri Takla atarak fırlatma (Yere çarpınca sürtünmeyle roket gibi gitmesi lazım)
-        if (IsKeyPressed(KEY_T)) {
+        if (IsKeyDown(KEY_T)) {
             topac->setPosition({ 0.0f, 10.0f, 0.0f });
             topac->setVelocity({ 0.0f, 0.0f, 0.0f });
             // Direkt açısal hızı ayarlıyoruz
