@@ -10,14 +10,14 @@
 namespace inert {
 
     const float GRAVITY_FORCE = 9.81f;
-    const float frictionTurn  =  0.98f;
-    const float frictionMove  =  0.98f;
+    const float frictionTurn  =  0.8f;
+    const float frictionMove  =  0.8f;
 
     const float jitterCutoffLinear = 0.001f;
     const float jitterCutoffAngular = 0.001f;
     
     enum class BodyType { STATIC, DYNAMIC, KINEMATIC };
-    enum class FrictionState { NONE, STATIC, KINETIC };
+    // enum class FrictionState { NONE, STATIC, KINETIC };
     enum class ColliderType { POINT_CLOUD, BOX, SPHERE };
 
     struct Collider {
@@ -41,8 +41,8 @@ namespace inert {
         
         float restitution = 0.4f;
 
-        float muStatic = 0.90f;
-        float muKinetic = 0.80f;
+        // float muStatic = 0.90f;
+        // float muKinetic = 0.80f;
 
         // Accumulators
         Vector3 forceAccum = { 0.0f, 0.0f, 0.0f };
@@ -63,65 +63,9 @@ namespace inert {
         // ==========================================
         //            PHYSICS INTEGRATERS
         // ==========================================
-        void integrateLinear(float deltaTime) {
-            state.velocity.x += (state.forceAccum.x * state.inverseMass) * deltaTime;
-            state.velocity.y += (state.forceAccum.y * state.inverseMass) * deltaTime;
-            state.velocity.z += (state.forceAccum.z * state.inverseMass) * deltaTime;
-
-            state.velocity.x *= frictionMove;
-            state.velocity.y *= frictionMove;
-            state.velocity.z *= frictionMove;
-
-            state.position.x += state.velocity.x * deltaTime;
-            state.position.y += state.velocity.y * deltaTime;
-            state.position.z += state.velocity.z * deltaTime;
-
-            float speed = Vector3Length(state.velocity);
-
-            linearActivity = true;
-            if (speed < jitterCutoffLinear) {
-                linearActivity = false;
-                state.velocity = { 0.0f, 0.0f, 0.0f };
-            }
-        }
-
-        void integrateAngular(float deltaTime) {
-            state.rotatVel.x += (state.torqueAccum.x * state.inverseInertia.x) * deltaTime;
-            state.rotatVel.y += (state.torqueAccum.y * state.inverseInertia.y) * deltaTime;
-            state.rotatVel.z += (state.torqueAccum.z * state.inverseInertia.z) * deltaTime;
-
-            state.rotatVel.x *= frictionTurn;
-            state.rotatVel.y *= frictionTurn;
-            state.rotatVel.z *= frictionTurn;
-
-            float rotSpeed = Vector3Length(state.rotatVel);
-            
-            if (rotSpeed > 0.0001f) { 
-                Vector3 rotAxis = Vector3Scale(state.rotatVel, 1.0f / rotSpeed);
-                Quaternion qDelta = QuaternionFromAxisAngle(rotAxis, rotSpeed * deltaTime);
-                state.orientation = QuaternionNormalize(QuaternionMultiply(qDelta, state.orientation));
-            }
-
-            angularActivity = true;
-            if (rotSpeed < jitterCutoffAngular) {
-                angularActivity = false;
-                state.rotatVel = { 0.0f, 0.0f, 0.0f };
-            }
-        }
-
-        void applyAngularImpulse(Vector3 torqueImpulse) {
-            Quaternion invOrientation = QuaternionInvert(state.orientation);
-            Vector3 localTorque = Vector3RotateByQuaternion(torqueImpulse, invOrientation);
-            
-            Vector3 localDelta = {
-                localTorque.x * state.inverseInertia.x,
-                localTorque.y * state.inverseInertia.y,
-                localTorque.z * state.inverseInertia.z
-            };
-        
-            state.rotatVel = Vector3Add(state.rotatVel,
-            Vector3RotateByQuaternion(localDelta, state.orientation));
-        }
+        void integrateLinear(float deltaTime);
+        void integrateAngular(float deltaTime);
+        void applyAngularImpulse(Vector3 torqueImpulse);
 
     public:
         PhysicsBody() {}
@@ -234,7 +178,7 @@ namespace inert {
             clearAccumulators();
         }
 
-        void clearAccumulators() {
+        void inline clearAccumulators() {
             state.forceAccum = { 0.0f, 0.0f, 0.0f };
             state.torqueAccum = { 0.0f, 0.0f, 0.0f };
         }
@@ -242,54 +186,14 @@ namespace inert {
         // ==========================================
         //              DEBUG DRAW
         // ==========================================
-        virtual void debugDraw() {
-            DrawSphere(state.position, 0.05f, RED);
-
-            for (const auto& collider : colliders) {
-                if (collider.type == ColliderType::POINT_CLOUD) {
-                    for (const auto& localPt : collider.localPoints) {
-                        Vector3 worldPoint = Vector3Add(state.position, Vector3Transform(localPt, QuaternionToMatrix(state.orientation)));
-                        DrawCube(worldPoint, 0.08f, 0.08f, 0.08f, BLUE);
-                        DrawLine3D(state.position, worldPoint, Fade(GRAY, 0.5f));
-                    }
-                }
-            }
-        }
+        virtual void debugDraw();
 
         // ==========================================
         //       QUATERNION ORIENTATION CALCS
         // ==========================================
 
-        void applyImpulse(Vector3 contactVector, Vector3 impulse) {
-            state.velocity = Vector3Add(state.velocity, Vector3Scale(impulse, state.inverseMass));
-
-            Vector3 worldTorqueImpulse = Vector3CrossProduct(contactVector, impulse);
-            
-            Quaternion invOrientation = QuaternionInvert(state.orientation);
-            Vector3 localTorque = Vector3RotateByQuaternion(worldTorqueImpulse, invOrientation);
-            
-            Vector3 localRotVelDelta = {
-                localTorque.x * state.inverseInertia.x,
-                localTorque.y * state.inverseInertia.y,
-                localTorque.z * state.inverseInertia.z
-            };
-            
-            Vector3 worldRotVelDelta = Vector3RotateByQuaternion(localRotVelDelta, state.orientation);
-            
-            state.rotatVel = Vector3Add(state.rotatVel, worldRotVelDelta);
-        }
-
-        void applyImpulseAtPoint(Vector3 impulse, Vector3 contactPoint) {
-            if (bodyType == BodyType::STATIC) return;
-
-            Vector3 r = Vector3Subtract(contactPoint, state.position);
-            
-            state.velocity = Vector3Add(state.velocity, Vector3Scale(impulse, state.inverseMass));
-            applyAngularImpulse(Vector3CrossProduct(r, impulse));
-
-            linearActivity = true;
-            angularActivity = true;
-        }
+        void applyImpulse(Vector3 contactVector, Vector3 impulse);
+        void applyImpulseAtPoint(Vector3 impulse, Vector3 contactPoint);
     };
 }
 
