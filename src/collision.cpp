@@ -1,4 +1,5 @@
 #include "collision.hpp"
+#include <unordered_set>
 
 namespace inert {
     
@@ -30,11 +31,13 @@ namespace inert {
         }
 
         // --- Tangent impulse ---
-        const Vector3 tangentImpulse =
-            PureMath::calculateTangentImpulse(stateA, stateB, m, normRes.magnitude, settings);
+        if (normRes.shouldApply) {
+            const Vector3 tangentImpulse =
+                PureMath::calculateTangentImpulse(stateA, stateB, m, normRes.magnitude, settings);
 
-        bodyA->applyImpulseAtPoint(Vector3Scale(tangentImpulse, -1.0f), m.contactPoint);
-        if (bodyB != nullptr) bodyB->applyImpulseAtPoint(tangentImpulse, m.contactPoint);
+            bodyA->applyImpulseAtPoint(Vector3Scale(tangentImpulse, -1.0f), m.contactPoint);
+            if (bodyB != nullptr) bodyB->applyImpulseAtPoint(tangentImpulse, m.contactPoint);
+        }
     }
 
 
@@ -51,7 +54,7 @@ namespace inert {
                     if (lowestPoint < groundLevel) {
                         CollisionManifold m;
                         m.isColliding  = true;
-                        m.normal       = { 0.0f, -1.0f, 0.0f };
+                        m.normal       = { 0.0f, 1.0f, 0.0f };
                         m.depth        = groundLevel - lowestPoint;
                         m.contactPoint = { body->getPosition().x, groundLevel, body->getPosition().z };
                         resolveManifold(body, nullptr, m);
@@ -70,7 +73,7 @@ namespace inert {
                         if (worldPoint.y < groundLevel) {
                             CollisionManifold m;
                             m.isColliding  = true;
-                            m.normal       = { 0.0f, -1.0f, 0.0f };
+                            m.normal       = { 0.0f, 1.0f, 0.0f };
                             m.depth        = groundLevel - worldPoint.y;
                             m.contactPoint = worldPoint;
                             resolveManifold(body, nullptr, m);
@@ -82,9 +85,12 @@ namespace inert {
     }
 
     void PhysicsWorld::handleBodyCollisions() {
+        std::unordered_set<PhysicsBody*> processed;
+
         for (auto bodyA : bodies) {
+            processed.insert(bodyA);
             for (auto bodyB : spatialHash.getNeighbors(bodyA)) {
-                if (bodyA >= bodyB) continue;
+                if (processed.count(bodyB)) continue;
 
                 for (const auto& colA : bodyA->getColliders()) {
                     for (const auto& colB : bodyB->getColliders()) {
@@ -108,5 +114,3 @@ namespace inert {
 
         
 }
-
-

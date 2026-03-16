@@ -15,7 +15,6 @@ namespace inert {
         static constexpr int P3 = 83492791;
         float cellSize = 5.0f;
         std::unordered_map<int, std::vector<PhysicsBody*>> grid;
-        int hash(Vector3 pos) const;
 
         inline int getHash(Vector3 pos) {
             int cx = (int)floor(pos.x / cellSize);
