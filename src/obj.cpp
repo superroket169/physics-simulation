@@ -49,6 +49,10 @@ namespace inert {
     }
 
     void PhysicsBody::applyAngularImpulse(Vector3 torqueImpulse) {
+        if (Vector3LengthSqr(torqueImpulse) < 1e-10f) return;
+
+        state.orientation = QuaternionNormalize(state.orientation);
+
         Quaternion invOrientation = QuaternionInvert(state.orientation);
         Vector3 localTorque = Vector3RotateByQuaternion(torqueImpulse, invOrientation);
 
@@ -59,7 +63,7 @@ namespace inert {
         };
 
         state.rotatVel = Vector3Add(state.rotatVel,
-        Vector3RotateByQuaternion(localDelta, state.orientation));
+            Vector3RotateByQuaternion(localDelta, state.orientation));
     }
 
     void PhysicsBody::applyImpulse(Vector3 contactVector, Vector3 impulse) {
@@ -80,7 +84,7 @@ namespace inert {
         angularActivity = true;
     }
 
-    virtual void PhysicsBody::debugDraw() {
+    void PhysicsBody::debugDraw() {
         DrawSphere(state.position, 0.05f, RED);
 
         for (const auto& collider : colliders) {

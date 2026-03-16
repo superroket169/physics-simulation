@@ -5,7 +5,8 @@ namespace inert {
 
         float calculateAngularEffect(const PhysicsState& state, Vector3 r, Vector3 axis) {
             if (state.inverseMass == 0.0f) return 0.0f;
-            
+            if (Vector3LengthSqr(r) < 1e-8f)  return 0.0f;
+
             Vector3 rCrossAxis = Vector3CrossProduct(r, axis);
             Quaternion invOrientation = QuaternionInvert(state.orientation);
             Vector3 rCrossAxis_local = Vector3RotateByQuaternion(rCrossAxis, invOrientation);
@@ -75,7 +76,7 @@ namespace inert {
             Vector3 relVel = Vector3Subtract(vB, vA);
 
             float velAlongNormal = Vector3DotProduct(relVel, m.normal);
-            if (velAlongNormal > 0) return res; 
+            if (velAlongNormal > 0) return res;
 
             float angularEffectA = calculateAngularEffect(stateA, rA, m.normal);
             float angularEffectB = calculateAngularEffect(stateB, rB, m.normal);

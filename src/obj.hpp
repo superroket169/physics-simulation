@@ -10,8 +10,8 @@
 namespace inert {
 
     const float GRAVITY_FORCE = 9.81f;
-    const float frictionTurn  =  0.8f;
-    const float frictionMove  =  0.8f;
+    const float frictionTurn  =  0.5f;
+    const float frictionMove  =  0.5f;
 
     const float jitterCutoffLinear = 0.001f;
     const float jitterCutoffAngular = 0.001f;
@@ -186,6 +186,7 @@ namespace inert {
         // ==========================================
         //              DEBUG DRAW
         // ==========================================
+        
         virtual void debugDraw();
 
         // ==========================================

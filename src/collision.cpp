@@ -54,7 +54,7 @@ namespace inert {
                     if (lowestPoint < groundLevel) {
                         CollisionManifold m;
                         m.isColliding  = true;
-                        m.normal       = { 0.0f, 1.0f, 0.0f };
+                        m.normal       = { 0.0f, -1.0f, 0.0f };
                         m.depth        = groundLevel - lowestPoint;
                         m.contactPoint = { body->getPosition().x, groundLevel, body->getPosition().z };
                         resolveManifold(body, nullptr, m);
@@ -73,7 +73,7 @@ namespace inert {
                         if (worldPoint.y < groundLevel) {
                             CollisionManifold m;
                             m.isColliding  = true;
-                            m.normal       = { 0.0f, 1.0f, 0.0f };
+                            m.normal       = { 0.0f, -1.0f, 0.0f };
                             m.depth        = groundLevel - worldPoint.y;
                             m.contactPoint = worldPoint;
                             resolveManifold(body, nullptr, m);
