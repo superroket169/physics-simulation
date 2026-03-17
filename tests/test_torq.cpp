@@ -2,8 +2,8 @@
 #include "raymath.h"
 #include <vector>
 #include <cmath>
-#include "obj.hpp"
-#include "collision.hpp"
+#include "../src/obj.hpp"
+#include "../src/collision.hpp"
 
 int main() {
     InitWindow(1024, 768, "Inertia Physics - Topac (Point Cloud) ve Tork Testi");

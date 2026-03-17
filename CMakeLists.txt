@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(raylib REQUIRED)
 add_executable(${PROJECT_NAME}
 
-    src/test_torq.cpp
+    tests/test_torq.cpp
     src/hash.cpp
     src/math.cpp
     src/collision.cpp

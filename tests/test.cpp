@@ -2,8 +2,8 @@
 #include "raymath.h"
 #include <vector>
 #include <string>
-#include "obj.hpp"
-#include "collision.hpp"
+#include "../src/obj.hpp"
+#include "../src/collision.hpp"
 
 // Topların renklerini ve çizim yarıçapını tutan yapı
 struct SphereData {

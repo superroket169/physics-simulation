@@ -40,9 +40,6 @@ namespace inert {
 
         void addObject(PhysicsBody* body) { bodies.push_back(body); }
 
-        void addGround(float y_level) {
-            bodies.push_back(new StaticPlaneBody({ 0.0f, 1.0f, 0.0f }, { 0.0f, y_level, 0.0f }));
-        }
 
         void registerCollision(ColliderType a, ColliderType b, CollisionFn fn) {
             dispatch.registerCollision(a, b, fn);

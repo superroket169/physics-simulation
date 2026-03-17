@@ -7,8 +7,6 @@
 
 namespace inert {
 
-    // colider function
-    //
     using CollisionFn = std::function<
         CollisionManifold(
             const Collider&,       const PhysicsState&,
@@ -79,7 +77,6 @@ namespace inert {
     inline CollisionDispatch buildDefaultDispatch() {
         CollisionDispatch d;
         d.registerCollision(ColliderType::SPHERE, ColliderType::SPHERE, CollisionFns::sphereVsSphere);
-        // others -> will be plane
         return d;
     }
 
