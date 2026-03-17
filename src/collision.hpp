@@ -7,6 +7,7 @@
 #include "obj.hpp"
 #include "math.hpp"
 #include "hash.hpp"
+#include "dispatch.hpp"
 
 namespace inert {
 
@@ -14,6 +15,7 @@ namespace inert {
     private:
         std::vector<PhysicsBody*> bodies;
         SpatialHash               spatialHash;
+        CollisionDispatch         dispatch;
 
         bool  hasGroundCollision = false;
         float groundLevel        = 0.0f;
@@ -43,10 +45,19 @@ namespace inert {
             groundState.inverseInertia = { 0.0f, 0.0f, 0.0f };
             groundState.velocity       = { 0.0f, 0.0f, 0.0f };
             groundState.rotatVel       = { 0.0f, 0.0f, 0.0f };
+
+            dispatch = buildDefaultDispatch();
         }
 
         void addObject(PhysicsBody* body) { bodies.push_back(body); }
-        void addGround(float y_level)     { hasGroundCollision = true; groundLevel = y_level; }
+        void addGround(float y_level) {
+            auto* plane = new StaticPlaneBody({0.0f, -1.0f, 0.0f}, {0.0f, y_level, 0.0f});
+            addObject(plane);
+        }
+
+        void registerCollision(ColliderType a, ColliderType b, CollisionFn fn) {
+            dispatch.registerCollision(a, b, fn);
+        }
 
         void step(float dt) {
             applyGravity();

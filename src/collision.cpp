@@ -89,18 +89,12 @@ namespace inert {
 
                 for (const auto& colA : bodyA->getColliders()) {
                     for (const auto& colB : bodyB->getColliders()) {
-
-                        if (colA.type == ColliderType::SPHERE &&
-                            colB.type == ColliderType::SPHERE)
-                        {
-                            const CollisionManifold m = PureMath::checkSphereSphere(
-                                bodyA->getState(), colA.size.x,
-                                bodyB->getState(), colB.size.x,
-                                settings
-                            );
-                            resolveManifold(bodyA, bodyB, m);
-                        }
-                        // TODO: diğer collider kombinasyonları ve dispatch table
+                        const CollisionManifold m = dispatch.dispatch(
+                            colA, bodyA->getState(),
+                            colB, bodyB->getState(),
+                            settings
+                        );
+                        resolveManifold(bodyA, bodyB, m);
                     }
                 }
             }
