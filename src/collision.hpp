@@ -17,6 +17,10 @@ namespace inert {
         SpatialHash               spatialHash;
         CollisionDispatch         dispatch;
 
+        bool  hasGroundCollision = false;
+        float groundLevel        = 0.0f;
+        PhysicsState groundState;
+
         void integrate(float dt) {
             for (auto body : bodies)
                 body->updateBody(dt);
@@ -29,6 +33,7 @@ namespace inert {
         }
 
         void resolveManifold(PhysicsBody* bodyA, PhysicsBody* bodyB, const CollisionManifold& m);
+        void handleGroundCollisions();
         void handleCollisions();
 
     public:
@@ -36,10 +41,19 @@ namespace inert {
 
         PhysicsWorld() {
             dispatch = buildDefaultDispatch();
+            groundState.inverseMass    = 0.0f;
+            groundState.inverseInertia = { 0.0f, 0.0f, 0.0f };
+            groundState.velocity       = { 0.0f, 0.0f, 0.0f };
+            groundState.rotatVel       = { 0.0f, 0.0f, 0.0f };
         }
 
         void addObject(PhysicsBody* body) { bodies.push_back(body); }
 
+
+        void addGround(float y_level) {
+            hasGroundCollision = true;
+            groundLevel = y_level;
+        }
 
         void registerCollision(ColliderType a, ColliderType b, CollisionFn fn) {
             dispatch.registerCollision(a, b, fn);
@@ -52,8 +66,10 @@ namespace inert {
             spatialHash.setCellSize(settings.spatialCellSize);
             spatialHash.update(bodies);
 
-            for (int k = 0; k < settings.solverIterations; k++)
+            for (int k = 0; k < settings.solverIterations; k++) {
+                handleGroundCollisions();
                 handleCollisions();
+            }
         }
     };
 
