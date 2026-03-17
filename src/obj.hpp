@@ -15,7 +15,7 @@ namespace inert {
     inline constexpr float jitterCutoffAngular = 0.001f;
 
     enum class BodyType     { STATIC, DYNAMIC, KINEMATIC };
-    enum class ColliderType { POINT_CLOUD, BOX, SPHERE };
+    enum class ColliderType { POINT_CLOUD, BOX, SPHERE, PLANE };
 
     struct Collider {
         ColliderType         type;
@@ -180,6 +180,24 @@ namespace inert {
         void applyImpulse(Vector3 contactVector, Vector3 impulse);
         void applyImpulseAtPoint(Vector3 impulse, Vector3 contactPoint);
     };
+
+
+    // spesified object for ground/plane
+    class StaticPlaneBody : public PhysicsBody {
+    public:
+        StaticPlaneBody(Vector3 normal, Vector3 pointOnPlane) {
+            bodyType = BodyType::STATIC;
+            state.inverseMass    = 0.0f;
+            state.inverseInertia = { 0.0f, 0.0f, 0.0f };
+            state.position       = pointOnPlane;
+
+            Collider c;
+            c.type       = ColliderType::PLANE;
+            c.size       = normal;
+            c.localPoints.push_back(pointOnPlane);
+            colliders.push_back(c);
+        }
+};
 
 } // namespace inert
 
