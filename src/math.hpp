@@ -37,7 +37,7 @@ namespace inert {
         Vector3 rA;             // contactPoint : positionA
         Vector3 rB;             // contactPoint : positionB
         Vector3 relVel;         // vB - vA (açısal etki dahil)
-        float   velAlongNormal
+        float   velAlongNormal;
         float   totalInvMass;
     };
 
