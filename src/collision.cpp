@@ -2,7 +2,7 @@
 #include <unordered_set>
 
 namespace inert {
-    
+
     void PhysicsWorld::resolveManifold(PhysicsBody* bodyA, PhysicsBody* bodyB, const CollisionManifold& m) {
         if (!m.isColliding) return;
 
@@ -12,7 +12,6 @@ namespace inert {
         const float restitutionA = bodyA->getRestitution();
         const float restitutionB = (bodyB != nullptr) ? bodyB->getRestitution() : 1.0f;
 
-        // --- Pozisyon correection ---
         PositionalCorrectionResult posRes =
             PureMath::calculatePositionalCorrection(stateA, stateB, m, settings);
 
@@ -21,25 +20,21 @@ namespace inert {
             if (bodyB != nullptr) bodyB->translate(posRes.translationB);
         }
 
-        // --- Normal impulse ---
-        NormalImpulseResult normRes =
-            PureMath::calculateNormalImpulse(stateA, stateB, restitutionA, restitutionB, m);
+        const ContactData cd = PureMath::buildContactData(stateA, stateB, m);
 
-        if (normRes.shouldApply) {
-            bodyA->applyImpulseAtPoint(Vector3Scale(normRes.impulse, -1.0f), m.contactPoint);
-            if (bodyB != nullptr) bodyB->applyImpulseAtPoint(normRes.impulse, m.contactPoint);
-        }
+        // --- Normal + tangent impulse ---
+        const ImpulseResult imp =
+            PureMath::calculateImpulses(stateA, stateB, restitutionA, restitutionB, m, cd, settings);
 
-        // --- Tangent impulse ---
-        if (normRes.shouldApply) {
-            const Vector3 tangentImpulse =
-                PureMath::calculateTangentImpulse(stateA, stateB, m, normRes.magnitude, settings);
-
-            bodyA->applyImpulseAtPoint(Vector3Scale(tangentImpulse, -1.0f), m.contactPoint);
-            if (bodyB != nullptr) bodyB->applyImpulseAtPoint(tangentImpulse, m.contactPoint);
+        if (imp.shouldApply) {
+            bodyA->applyImpulseAtPoint(Vector3Scale(imp.normal,  -1.0f), m.contactPoint);
+            bodyA->applyImpulseAtPoint(Vector3Scale(imp.tangent, -1.0f), m.contactPoint);
+            if (bodyB != nullptr) {
+                bodyB->applyImpulseAtPoint(imp.normal,  m.contactPoint);
+                bodyB->applyImpulseAtPoint(imp.tangent, m.contactPoint);
+            }
         }
     }
-
 
     void PhysicsWorld::handleGroundCollisions() {
         if (!hasGroundCollision) return;
@@ -48,7 +43,7 @@ namespace inert {
             for (const auto& collider : body->getColliders()) {
 
                 if (collider.type == ColliderType::SPHERE) {
-                    const float radius = collider.size.x;
+                    const float radius      = collider.size.x;
                     const float lowestPoint = body->getPosition().y - radius;
 
                     if (lowestPoint < groundLevel) {
@@ -60,16 +55,16 @@ namespace inert {
                         resolveManifold(body, nullptr, m);
                     }
                 }
-        
+
                 else if (collider.type == ColliderType::POINT_CLOUD) {
                     const Matrix rotMat = QuaternionToMatrix(body->getState().orientation);
-    
+
                     for (const auto& localPt : collider.localPoints) {
                         const Vector3 worldPoint = Vector3Add(
                             body->getPosition(),
                             Vector3Transform(localPt, rotMat)
                         );
-    
+
                         if (worldPoint.y < groundLevel) {
                             CollisionManifold m;
                             m.isColliding  = true;
@@ -105,12 +100,11 @@ namespace inert {
                             );
                             resolveManifold(bodyA, bodyB, m);
                         }
-                        // TODO: diğer collider kombinasyonları
+                        // TODO: diğer collider kombinasyonları ve dispatch table
                     }
                 }
             }
         }
     }
 
-        
 }

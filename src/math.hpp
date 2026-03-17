@@ -33,43 +33,53 @@ namespace inert {
         bool shouldCorrect;
     };
 
-    struct NormalImpulseResult {
-        Vector3 impulse; 
-        float magnitude; 
-        bool shouldApply;
+    struct ContactData {
+        Vector3 rA;             // contactPoint : positionA
+        Vector3 rB;             // contactPoint : positionB
+        Vector3 relVel;         // vB - vA (açısal etki dahil)
+        float   velAlongNormal
+        float   totalInvMass;
+    };
+
+    struct ImpulseResult {
+        Vector3 normal;
+        Vector3 tangent;
+        bool    shouldApply;
     };
 
     namespace PureMath {
 
         float calculateAngularEffect
             (const PhysicsState& state, Vector3 r, Vector3 axis);
-        
+
+        // İki state + manifold → ContactData, bir kere hesapla ikisine geç
+        ContactData buildContactData
+            (const PhysicsState& stateA,
+             const PhysicsState& stateB,
+             const CollisionManifold& m);
+
         CollisionManifold checkSphereSphere
             (const PhysicsState& stateA,
              float radiusA,
              const PhysicsState& stateB,
              float radiusB,
              const PhysicsSettings& settings);
-        
+
         PositionalCorrectionResult calculatePositionalCorrection
             (const PhysicsState& stateA,
              const PhysicsState& stateB,
              const CollisionManifold& m,
              const PhysicsSettings& settings);
-        
-        NormalImpulseResult calculateNormalImpulse
+
+        // Normal + tangent impulse tek seferde — DRY
+        ImpulseResult calculateImpulses
             (const PhysicsState& stateA,
              const PhysicsState& stateB,
              float restitutionA,
              float restitutionB,
-             const CollisionManifold& m);
-
-        Vector3 calculateTangentImpulse
-            (const PhysicsState& stateA,
-             const PhysicsState& stateB,
              const CollisionManifold& m,
-             float normalImpulseMag, const
-             PhysicsSettings& settings);
+             const ContactData& cd,
+             const PhysicsSettings& settings);
     }
 }
 

@@ -65,68 +65,53 @@ namespace inert {
             return res;
         }
 
-        NormalImpulseResult calculateNormalImpulse(const PhysicsState& stateA, const PhysicsState& stateB, float restitutionA, float restitutionB, const CollisionManifold& m) {
-            NormalImpulseResult res = { {0, 0, 0}, 0.0f, false };
-            
-            Vector3 rA = Vector3Subtract(m.contactPoint, stateA.position);
-            Vector3 rB = Vector3Subtract(m.contactPoint, stateB.position);
-            
-            Vector3 vA = Vector3Add(stateA.velocity, Vector3CrossProduct(stateA.rotatVel, rA));
-            Vector3 vB = Vector3Add(stateB.velocity, Vector3CrossProduct(stateB.rotatVel, rB));
-            Vector3 relVel = Vector3Subtract(vB, vA);
+        ContactData buildContactData(const PhysicsState& stateA, const PhysicsState& stateB, const CollisionManifold& m) {
+            ContactData cd;
+            cd.rA = Vector3Subtract(m.contactPoint, stateA.position);
+            cd.rB = Vector3Subtract(m.contactPoint, stateB.position);
 
-            float velAlongNormal = Vector3DotProduct(relVel, m.normal);
-            if (velAlongNormal > 0) return res;
-
-            float angularEffectA = calculateAngularEffect(stateA, rA, m.normal);
-            float angularEffectB = calculateAngularEffect(stateB, rB, m.normal);
-            float totalInvMass = stateA.inverseMass + stateB.inverseMass;
-            
-            float e = std::min(restitutionA, restitutionB);
-            float j = -(1.0f + e) * velAlongNormal;
-            j /= (totalInvMass + angularEffectA + angularEffectB);
-
-            res.impulse = Vector3Scale(m.normal, j);
-            res.magnitude = j;
-            res.shouldApply = true;
-            
-            return res;
+            Vector3 vA = Vector3Add(stateA.velocity, Vector3CrossProduct(stateA.rotatVel, cd.rA));
+            Vector3 vB = Vector3Add(stateB.velocity, Vector3CrossProduct(stateB.rotatVel, cd.rB));
+            cd.relVel         = Vector3Subtract(vB, vA);
+            cd.velAlongNormal = Vector3DotProduct(cd.relVel, m.normal);
+            cd.totalInvMass   = stateA.inverseMass + stateB.inverseMass;
+            return cd;
         }
 
-        Vector3 calculateTangentImpulse(const PhysicsState& stateA, const PhysicsState& stateB, const CollisionManifold& m, float normalImpulseMag, const PhysicsSettings& settings) {
-            Vector3 rA = Vector3Subtract(m.contactPoint, stateA.position);
-            Vector3 rB = Vector3Subtract(m.contactPoint, stateB.position);
-            
-            Vector3 vA = Vector3Add(stateA.velocity, Vector3CrossProduct(stateA.rotatVel, rA));
-            Vector3 vB = Vector3Add(stateB.velocity, Vector3CrossProduct(stateB.rotatVel, rB));
-            Vector3 relVel = Vector3Subtract(vB, vA);
+        ImpulseResult calculateImpulses(const PhysicsState& stateA, const PhysicsState& stateB, float restitutionA, float restitutionB, const CollisionManifold& m, const ContactData& cd, const PhysicsSettings& settings) {
+            ImpulseResult res = { {0,0,0}, {0,0,0}, false };
 
-            float velAlongNormal = Vector3DotProduct(relVel, m.normal);
-            Vector3 normalVelocity = Vector3Scale(m.normal, velAlongNormal);
-            Vector3 tangentVelocity = Vector3Subtract(relVel, normalVelocity);
-            
-            float tangentSpeed = Vector3Length(tangentVelocity);
-            if (tangentSpeed < settings.velocityEpsilon) return {0, 0, 0};
+            if (cd.velAlongNormal > 0) return res;
 
-            Vector3 t = Vector3Scale(tangentVelocity, 1.0f / tangentSpeed);
-            
-            float angularEffectA = calculateAngularEffect(stateA, rA, t);
-            float angularEffectB = calculateAngularEffect(stateB, rB, t);
-            float totalInvMass = stateA.inverseMass + stateB.inverseMass;
-            
-            float jt = -tangentSpeed / (totalInvMass + angularEffectA + angularEffectB);
-            
-            // NOTE : resting impulse implemente edilecek
-            // float effectiveNormal = normalImpulseMag;
-            // float massA = stateA.inverseMass > 0.0f ? (1.0f / stateA.inverseMass) : 0.0f;
-            // float restingImpulse = massA * abs(settings.gravityY) * 0.016f; // m * g * dt (Yaklaşık)
-            // çok özür ama sonradan tüm katsayıları değiştirilebilir yapacağım
-            // if (effectiveNormal < restingImpulse) effectiveNormal = restingImpulse;
+            // --- Normal impulse ---
+            float angularEffectA = calculateAngularEffect(stateA, cd.rA, m.normal);
+            float angularEffectB = calculateAngularEffect(stateB, cd.rB, m.normal);
 
-            float maxFriction = normalImpulseMag * settings.baseFrictionMu;
-            jt = Clamp(jt, -maxFriction, maxFriction);
-            
-            return Vector3Scale(t, jt);
+            float e = std::min(restitutionA, restitutionB);
+            float j = -(1.0f + e) * cd.velAlongNormal;
+            j /= (cd.totalInvMass + angularEffectA + angularEffectB);
+
+            res.normal    = Vector3Scale(m.normal, j);
+            res.shouldApply = true;
+
+            // --- Tangent impulse ---
+            Vector3 normalVelocity  = Vector3Scale(m.normal, cd.velAlongNormal);
+            Vector3 tangentVelocity = Vector3Subtract(cd.relVel, normalVelocity);
+            float   tangentSpeed    = Vector3Length(tangentVelocity);
+
+            if (tangentSpeed >= settings.velocityEpsilon) {
+                Vector3 t = Vector3Scale(tangentVelocity, 1.0f / tangentSpeed);
+
+                float angularEffectAt = calculateAngularEffect(stateA, cd.rA, t);
+                float angularEffectBt = calculateAngularEffect(stateB, cd.rB, t);
+
+                float jt = -tangentSpeed / (cd.totalInvMass + angularEffectAt + angularEffectBt);
+                jt = Clamp(jt, -j * settings.baseFrictionMu, j * settings.baseFrictionMu);
+
+                res.tangent = Vector3Scale(t, jt);
+            }
+
+            return res;
         }
 
     }
