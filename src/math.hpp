@@ -52,7 +52,6 @@ namespace inert {
         float calculateAngularEffect
             (const PhysicsState& state, Vector3 r, Vector3 axis);
 
-        // İki state + manifold → ContactData, bir kere hesapla ikisine geç
         ContactData buildContactData
             (const PhysicsState& stateA,
              const PhysicsState& stateB,
@@ -71,7 +70,6 @@ namespace inert {
              const CollisionManifold& m,
              const PhysicsSettings& settings);
 
-        // Normal + tangent impulse tek seferde — DRY
         ImpulseResult calculateImpulses
             (const PhysicsState& stateA,
              const PhysicsState& stateB,
