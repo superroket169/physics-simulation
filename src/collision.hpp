@@ -17,11 +17,6 @@ namespace inert {
         SpatialHash               spatialHash;
         CollisionDispatch         dispatch;
 
-        bool  hasGroundCollision = false;
-        float groundLevel        = 0.0f;
-
-        PhysicsState groundState;
-
         void integrate(float dt) {
             for (auto body : bodies)
                 body->updateBody(dt);
@@ -34,25 +29,19 @@ namespace inert {
         }
 
         void resolveManifold(PhysicsBody* bodyA, PhysicsBody* bodyB, const CollisionManifold& m);
-        void handleGroundCollisions();
-        void handleBodyCollisions();
+        void handleCollisions();
 
     public:
         PhysicsSettings settings;
 
         PhysicsWorld() {
-            groundState.inverseMass    = 0.0f;
-            groundState.inverseInertia = { 0.0f, 0.0f, 0.0f };
-            groundState.velocity       = { 0.0f, 0.0f, 0.0f };
-            groundState.rotatVel       = { 0.0f, 0.0f, 0.0f };
-
             dispatch = buildDefaultDispatch();
         }
 
         void addObject(PhysicsBody* body) { bodies.push_back(body); }
+
         void addGround(float y_level) {
-            auto* plane = new StaticPlaneBody({0.0f, -1.0f, 0.0f}, {0.0f, y_level, 0.0f});
-            addObject(plane);
+            bodies.push_back(new StaticPlaneBody({ 0.0f, 1.0f, 0.0f }, { 0.0f, y_level, 0.0f }));
         }
 
         void registerCollision(ColliderType a, ColliderType b, CollisionFn fn) {
@@ -66,10 +55,8 @@ namespace inert {
             spatialHash.setCellSize(settings.spatialCellSize);
             spatialHash.update(bodies);
 
-            for (int k = 0; k < settings.solverIterations; k++) {
-                handleGroundCollisions();
-                handleBodyCollisions();
-            }
+            for (int k = 0; k < settings.solverIterations; k++)
+                handleCollisions();
         }
     };
 

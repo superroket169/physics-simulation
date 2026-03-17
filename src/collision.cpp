@@ -7,79 +7,33 @@ namespace inert {
         if (!m.isColliding) return;
 
         const PhysicsState stateA = bodyA->getState();
-        const PhysicsState stateB = (bodyB != nullptr) ? bodyB->getState() : groundState;
+        const PhysicsState stateB = bodyB->getState();
 
         const float restitutionA = bodyA->getRestitution();
-        const float restitutionB = (bodyB != nullptr) ? bodyB->getRestitution() : 1.0f;
+        const float restitutionB = bodyB->getRestitution();
 
         PositionalCorrectionResult posRes =
             PureMath::calculatePositionalCorrection(stateA, stateB, m, settings);
 
         if (posRes.shouldCorrect) {
             bodyA->translate(posRes.translationA);
-            if (bodyB != nullptr) bodyB->translate(posRes.translationB);
+            bodyB->translate(posRes.translationB);
         }
 
         const ContactData cd = PureMath::buildContactData(stateA, stateB, m);
 
-        // --- Normal + tangent impulse ---
         const ImpulseResult imp =
             PureMath::calculateImpulses(stateA, stateB, restitutionA, restitutionB, m, cd, settings);
 
         if (imp.shouldApply) {
             bodyA->applyImpulseAtPoint(Vector3Scale(imp.normal,  -1.0f), m.contactPoint);
             bodyA->applyImpulseAtPoint(Vector3Scale(imp.tangent, -1.0f), m.contactPoint);
-            if (bodyB != nullptr) {
-                bodyB->applyImpulseAtPoint(imp.normal,  m.contactPoint);
-                bodyB->applyImpulseAtPoint(imp.tangent, m.contactPoint);
-            }
+            bodyB->applyImpulseAtPoint(imp.normal,  m.contactPoint);
+            bodyB->applyImpulseAtPoint(imp.tangent, m.contactPoint);
         }
     }
 
-    void PhysicsWorld::handleGroundCollisions() {
-        if (!hasGroundCollision) return;
-
-        for (auto body : bodies) {
-            for (const auto& collider : body->getColliders()) {
-
-                if (collider.type == ColliderType::SPHERE) {
-                    const float radius      = collider.size.x;
-                    const float lowestPoint = body->getPosition().y - radius;
-
-                    if (lowestPoint < groundLevel) {
-                        CollisionManifold m;
-                        m.isColliding  = true;
-                        m.normal       = { 0.0f, -1.0f, 0.0f };
-                        m.depth        = groundLevel - lowestPoint;
-                        m.contactPoint = { body->getPosition().x, groundLevel, body->getPosition().z };
-                        resolveManifold(body, nullptr, m);
-                    }
-                }
-
-                else if (collider.type == ColliderType::POINT_CLOUD) {
-                    const Matrix rotMat = QuaternionToMatrix(body->getState().orientation);
-
-                    for (const auto& localPt : collider.localPoints) {
-                        const Vector3 worldPoint = Vector3Add(
-                            body->getPosition(),
-                            Vector3Transform(localPt, rotMat)
-                        );
-
-                        if (worldPoint.y < groundLevel) {
-                            CollisionManifold m;
-                            m.isColliding  = true;
-                            m.normal       = { 0.0f, -1.0f, 0.0f };
-                            m.depth        = groundLevel - worldPoint.y;
-                            m.contactPoint = worldPoint;
-                            resolveManifold(body, nullptr, m);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    void PhysicsWorld::handleBodyCollisions() {
+    void PhysicsWorld::handleCollisions() {
         std::unordered_set<PhysicsBody*> processed;
 
         for (auto bodyA : bodies) {
