@@ -3,8 +3,8 @@
 
 #include <cstdint>
 #include "raylib.h"
-#include "raymath.h"
 #include <vector>
+#include "vector.hpp"
 
 namespace inert {
 
@@ -14,39 +14,41 @@ namespace inert {
     inline constexpr float jitterCutoffLinear  = 0.001f;
     inline constexpr float jitterCutoffAngular = 0.001f;
 
+    // Only use these where raylib drawing functions require Vector3
+    inline Vector3 toRaylib(const vec3f& v)  { return { v[0], v[1], v[2] }; }
+    inline vec3f fromRaylib(const Vector3& v) { return { v.x, v.y, v.z }; }
+
     enum class BodyType     { STATIC, DYNAMIC, KINEMATIC };
     enum class ColliderType { POINT_CLOUD, BOX, SPHERE };
 
-    
     struct Collider {
         ColliderType type;
 
         // SPHERE      -> size.x = radius
         // POINT_CLOUD -> no use
-        Vector3 size;
+        vec3f size;
 
         // SPHERE      -> no use
         // BOX         -> no use
         // POINT_CLOUD -> point list
-        std::vector<Vector3> localPoints;
+        std::vector<vec3f> localPoints;
     };
 
-
     struct PhysicsState {
-        Vector3    position     = { 0.0f, 0.0f, 0.0f };
-        Vector3    velocity     = { 0.0f, 0.0f, 0.0f };
-        Quaternion orientation  = { 0.0f, 0.0f, 0.0f, 1.0f };
-        Vector3    rotatVel     = { 0.0f, 0.0f, 0.0f };
+        vec3f position;
+        vec3f velocity;
+        quatf orientation;
+        vec3f rotatVel;
 
-        float   mass           = 1.0f;
-        float   inverseMass    = 1.0f;              // 1/m
-        Vector3 inertia        = { 0.5f, 0.5f, 0.8f };
-        Vector3 inverseInertia = { 2.0f, 2.0f, 1.25f }; // 1/I
+        float mass        = 1.0f;
+        float inverseMass = 1.0f;              // 1/m
+        vec3f inertia     = { 0.5f, 0.5f, 0.8f };
+        vec3f inverseInertia = { 2.0f, 2.0f, 1.25f }; // 1/I
 
         float restitution = 0.4f;
 
-        Vector3 forceAccum  = { 0.0f, 0.0f, 0.0f };
-        Vector3 torqueAccum = { 0.0f, 0.0f, 0.0f };
+        vec3f forceAccum;
+        vec3f torqueAccum;
     };
 
     class PhysicsBody {
@@ -63,7 +65,7 @@ namespace inert {
         // ==========================================
         void integrateLinear (float deltaTime);
         void integrateAngular(float deltaTime);
-        void applyAngularImpulse(Vector3 torqueImpulse);
+        void applyAngularImpulse(vec3f torqueImpulse);
 
     public:
         PhysicsBody()          {}
@@ -73,63 +75,63 @@ namespace inert {
         //                  GETTERS
         // ==========================================
 
-        Vector3    getPosition()         const { return state.position; }
-        Vector3    getVelocity()         const { return state.velocity; }
-        Vector3    getRotationVelocity() const { return state.rotatVel; }
-        Quaternion getOrientation()      const { return state.orientation; }
-        float      getMass()             const { return state.mass; }
-        Vector3    getInertia()          const { return state.inertia; }
-        Vector3    getForceAccum()       const { return state.forceAccum; }
-        Vector3    getTorqueAccum()      const { return state.torqueAccum; }
-        float      getRestitution()      const { return state.restitution; }
-        BodyType   getBodyType()         const { return bodyType; }
-        bool       getAngularActivity()  const { return angularActivity; }
-        bool       getLinearActivity()   const { return linearActivity; }
+        vec3f    getPosition()         const { return state.position; }
+        vec3f    getVelocity()         const { return state.velocity; }
+        vec3f    getRotationVelocity() const { return state.rotatVel; }
+        quatf    getOrientation()      const { return state.orientation; }
+        float    getMass()             const { return state.mass; }
+        vec3f    getInertia()          const { return state.inertia; }
+        vec3f    getForceAccum()       const { return state.forceAccum; }
+        vec3f    getTorqueAccum()      const { return state.torqueAccum; }
+        float    getRestitution()      const { return state.restitution; }
+        BodyType getBodyType()         const { return bodyType; }
+        bool     getAngularActivity()  const { return angularActivity; }
+        bool     getLinearActivity()   const { return linearActivity; }
 
         const std::vector<Collider>& getColliders() const { return colliders; }
         const PhysicsState&          getState()     const { return state; }
 
-        Vector3 getVelocityAtPoint(Vector3 point) const {
-            Vector3 r = Vector3Subtract(point, state.position);
-            return Vector3Add(state.velocity, Vector3CrossProduct(state.rotatVel, r));
+        vec3f getVelocityAtPoint(vec3f point) const {
+            vec3f r = point - state.position;
+            return state.velocity + getCrossProduct(state.rotatVel, r);
         }
 
         // ==========================================
         //                  ADDERS
         // ==========================================
 
-        void addForce(Vector3 force) {
+        void addForce(vec3f force) {
             if (bodyType != BodyType::DYNAMIC) return;
-            state.forceAccum = Vector3Add(state.forceAccum, force);
+            state.forceAccum += force;
         }
-        void addForceAtPoint(Vector3 force, Vector3 offsetFromCenter) {
+        void addForceAtPoint(vec3f force, vec3f offsetFromCenter) {
             if (bodyType != BodyType::DYNAMIC) return;
             addForce(force);
-            addTorque(Vector3CrossProduct(offsetFromCenter, force));
+            addTorque(getCrossProduct(offsetFromCenter, force));
         }
-        void addTorque(Vector3 torque) {
+        void addTorque(vec3f torque) {
             if (bodyType != BodyType::DYNAMIC) return;
-            state.torqueAccum = Vector3Add(state.torqueAccum, torque);
+            state.torqueAccum += torque;
         }
-        void addVelocity(Vector3 deltaV) {
+        void addVelocity(vec3f deltaV) {
             if (bodyType != BodyType::DYNAMIC) return;
-            state.velocity = Vector3Add(state.velocity, deltaV);
+            state.velocity += deltaV;
         }
 
         // ==========================================
         //                  SETTERS
         // ==========================================
 
-        void setPosition(Vector3 pos)      { state.position = pos; }
-        void translate(Vector3 deltaPos)   { state.position = Vector3Add(state.position, deltaPos); }
-        void setVelocity(Vector3 v)        { if (bodyType == BodyType::DYNAMIC) state.velocity = v; }
-        void setAngularVelocity(Vector3 w) { if (bodyType == BodyType::DYNAMIC) state.rotatVel = w; }
-        void setRestitution(float r)       { state.restitution = r; }
-        void setLinearDamping(float)       { /* TODO */ }
+        void setPosition(vec3f pos)      { state.position = pos; }
+        void translate(vec3f deltaPos)   { state.position += deltaPos; }
+        void setVelocity(vec3f v)        { if (bodyType == BodyType::DYNAMIC) state.velocity = v; }
+        void setAngularVelocity(vec3f w) { if (bodyType == BodyType::DYNAMIC) state.rotatVel = w; }
+        void setRestitution(float r)     { state.restitution = r; }
+        void setLinearDamping(float)     { /* TODO */ }
 
-        void setOrientation(Quaternion q) {
+        void setOrientation(quatf q) {
             if (bodyType == BodyType::DYNAMIC)
-                state.orientation = QuaternionNormalize(q);
+                state.orientation = q.getNormalized();
         }
 
         void setMass(float m) {
@@ -137,27 +139,25 @@ namespace inert {
             state.inverseMass = (m > 0.0f) ? (1.0f / m) : 0.0f;
         }
 
-        void setInertia(Vector3 newInertia) {
+        void setInertia(vec3f newInertia) {
             state.inertia = newInertia;
-            state.inverseInertia = {
-                (newInertia.x > 0.0001f) ? 1.0f / newInertia.x : 0.0f,
-                (newInertia.y > 0.0001f) ? 1.0f / newInertia.y : 0.0f,
-                (newInertia.z > 0.0001f) ? 1.0f / newInertia.z : 0.0f
-            };
+            state.inverseInertia[0] = (newInertia[0] > 0.0001f) ? 1.0f / newInertia[0] : 0.0f;
+            state.inverseInertia[1] = (newInertia[1] > 0.0001f) ? 1.0f / newInertia[1] : 0.0f;
+            state.inverseInertia[2] = (newInertia[2] > 0.0001f) ? 1.0f / newInertia[2] : 0.0f;
         }
 
         // ==========================================
         //                COLLIDER
         // ==========================================
 
-        void addCollider(ColliderType mode, Vector3 dimensions) {
+        void addCollider(ColliderType mode, vec3f dimensions) {
             if (mode == ColliderType::POINT_CLOUD) return;
             colliders.push_back({ mode, dimensions, {} });
         }
 
-        void addCollider(ColliderType mode, const std::vector<Vector3>& points) {
+        void addCollider(ColliderType mode, const std::vector<vec3f>& points) {
             if (mode != ColliderType::POINT_CLOUD) return;
-            colliders.push_back({ mode, {}, points });
+            colliders.push_back({ mode, vec3f{}, points });
         }
 
         // ==========================================
@@ -174,8 +174,8 @@ namespace inert {
         }
 
         inline void clearAccumulators() {
-            state.forceAccum  = { 0.0f, 0.0f, 0.0f };
-            state.torqueAccum = { 0.0f, 0.0f, 0.0f };
+            state.forceAccum  = vec3f{};
+            state.torqueAccum = vec3f{};
         }
 
         // ==========================================
@@ -186,11 +186,9 @@ namespace inert {
         // ==========================================
         //                IMPULSE
         // ==========================================
-        void applyImpulse(Vector3 contactVector, Vector3 impulse);
-        void applyImpulseAtPoint(Vector3 impulse, Vector3 contactPoint);
+        void applyImpulse(vec3f contactVector, vec3f impulse);
+        void applyImpulseAtPoint(vec3f impulse, vec3f contactPoint);
     };
-
-
 
 } // namespace inert
 

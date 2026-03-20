@@ -3,7 +3,6 @@
 
 #include <vector>
 #include <unordered_map>
-#include "raylib.h"
 #include "obj.hpp"
 
 namespace inert {
@@ -16,10 +15,10 @@ namespace inert {
         float cellSize = 5.0f;
         std::unordered_map<int, std::vector<PhysicsBody*>> grid;
 
-        inline int getHash(Vector3 pos) {
-            int cx = (int)floor(pos.x / cellSize);
-            int cy = (int)floor(pos.y / cellSize);
-            int cz = (int)floor(pos.z / cellSize);
+        inline int getHash(const vec3f& pos) {
+            int cx = (int)floor(pos[0] / cellSize);
+            int cy = (int)floor(pos[1] / cellSize);
+            int cz = (int)floor(pos[2] / cellSize);
             return (cx * P1) ^ (cy * P2) ^ (cz * P3);
         }
 
@@ -37,7 +36,5 @@ namespace inert {
         std::vector<PhysicsBody*> getNeighbors(PhysicsBody* body);
     };
 }
-
-
 
 #endif // !HASH_HPP

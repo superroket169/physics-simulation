@@ -1,102 +1,89 @@
 #include "obj.hpp"
 
 namespace inert {
+
     void PhysicsBody::integrateLinear(float deltaTime) {
-        state.velocity.x += (state.forceAccum.x * state.inverseMass) * deltaTime;
-        state.velocity.y += (state.forceAccum.y * state.inverseMass) * deltaTime;
-        state.velocity.z += (state.forceAccum.z * state.inverseMass) * deltaTime;
+        state.velocity += state.forceAccum * state.inverseMass * deltaTime;
 
-        state.velocity.x *= powf(frictionMove, deltaTime);
-        state.velocity.y *= powf(frictionMove, deltaTime);
-        state.velocity.z *= powf(frictionMove, deltaTime);
+        state.velocity *= powf(frictionMove, deltaTime);
 
-        state.position.x += state.velocity.x * deltaTime;
-        state.position.y += state.velocity.y * deltaTime;
-        state.position.z += state.velocity.z * deltaTime;
-
-        float speed = Vector3Length(state.velocity);
+        state.position += state.velocity * deltaTime;
 
         linearActivity = true;
-        if (speed < jitterCutoffLinear) {
+        if (state.velocity.getLength() < jitterCutoffLinear) {
             linearActivity = false;
-            state.velocity = { 0.0f, 0.0f, 0.0f };
+            state.velocity = vec3f{};
         }
     }
 
-    
     void PhysicsBody::integrateAngular(float deltaTime) {
-        state.rotatVel.x += (state.torqueAccum.x * state.inverseInertia.x) * deltaTime;
-        state.rotatVel.y += (state.torqueAccum.y * state.inverseInertia.y) * deltaTime;
-        state.rotatVel.z += (state.torqueAccum.z * state.inverseInertia.z) * deltaTime;
+        state.rotatVel[0] += (state.torqueAccum[0] * state.inverseInertia[0]) * deltaTime;
+        state.rotatVel[1] += (state.torqueAccum[1] * state.inverseInertia[1]) * deltaTime;
+        state.rotatVel[2] += (state.torqueAccum[2] * state.inverseInertia[2]) * deltaTime;
 
-        state.rotatVel.x *= powf(frictionTurn, deltaTime);
-        state.rotatVel.y *= powf(frictionTurn, deltaTime);
-        state.rotatVel.z *= powf(frictionTurn, deltaTime);
+        state.rotatVel *= powf(frictionTurn, deltaTime);
 
-        float rotSpeed = Vector3Length(state.rotatVel);
-            
-        if (rotSpeed > 0.0001f) { 
-            Vector3 rotAxis = Vector3Scale(state.rotatVel, 1.0f / rotSpeed);
-            Quaternion qDelta = QuaternionFromAxisAngle(rotAxis, rotSpeed * deltaTime);
-            state.orientation = QuaternionNormalize(QuaternionMultiply(qDelta, state.orientation));
+        float rotSpeed = state.rotatVel.getLength();
+
+        if (rotSpeed > 0.0001f) {
+            vec3f rotAxis = state.rotatVel * (1.0f / rotSpeed);
+            quatf qDelta  = quatf::fromAxisAngle(rotAxis, rotSpeed * deltaTime);
+            state.orientation = (qDelta * state.orientation).getNormalized();
         }
 
         angularActivity = true;
         if (rotSpeed < jitterCutoffAngular) {
             angularActivity = false;
-            state.rotatVel = { 0.0f, 0.0f, 0.0f };
+            state.rotatVel = vec3f{};
         }
     }
 
-    void PhysicsBody::applyAngularImpulse(Vector3 torqueImpulse) {
-        if (Vector3LengthSqr(torqueImpulse) < 1e-10f) return;
+    void PhysicsBody::applyAngularImpulse(vec3f torqueImpulse) {
+        if (torqueImpulse.getLengthSqr() < 1e-10f) return;
 
-        state.orientation = QuaternionNormalize(state.orientation);
+        state.orientation = state.orientation.getNormalized();
 
-        Quaternion invOrientation = QuaternionInvert(state.orientation);
-        Vector3 localTorque = Vector3RotateByQuaternion(torqueImpulse, invOrientation);
+        quatf invOrientation = state.orientation.getInverted();
+        vec3f localTorque    = rotate(torqueImpulse, invOrientation);
 
-        Vector3 localDelta = {
-            localTorque.x * state.inverseInertia.x,
-            localTorque.y * state.inverseInertia.y,
-            localTorque.z * state.inverseInertia.z
-        };
+        vec3f localDelta;
+        localDelta[0] = localTorque[0] * state.inverseInertia[0];
+        localDelta[1] = localTorque[1] * state.inverseInertia[1];
+        localDelta[2] = localTorque[2] * state.inverseInertia[2];
 
-        state.rotatVel = Vector3Add(state.rotatVel,
-            Vector3RotateByQuaternion(localDelta, state.orientation));
+        state.rotatVel += rotate(localDelta, state.orientation);
     }
 
-    void PhysicsBody::applyImpulse(Vector3 contactVector, Vector3 impulse) {
-        state.velocity = Vector3Add(state.velocity, Vector3Scale(impulse, state.inverseMass));
-        applyAngularImpulse(Vector3CrossProduct(contactVector, impulse));
-
+    void PhysicsBody::applyImpulse(vec3f contactVector, vec3f impulse) {
+        state.velocity += impulse * state.inverseMass;
+        applyAngularImpulse(getCrossProduct(contactVector, impulse));
     }
 
-    void PhysicsBody::applyImpulseAtPoint(Vector3 impulse, Vector3 contactPoint) {
+    void PhysicsBody::applyImpulseAtPoint(vec3f impulse, vec3f contactPoint) {
         if (bodyType == BodyType::STATIC) return;
 
-        Vector3 r = Vector3Subtract(contactPoint, state.position);
+        vec3f r = contactPoint - state.position;
 
-        state.velocity = Vector3Add(state.velocity, Vector3Scale(impulse, state.inverseMass));
-        applyAngularImpulse(Vector3CrossProduct(r, impulse));
+        state.velocity += impulse * state.inverseMass;
+        applyAngularImpulse(getCrossProduct(r, impulse));
 
-        linearActivity = true;
+        linearActivity  = true;
         angularActivity = true;
     }
 
     void PhysicsBody::debugDraw() {
-        DrawSphere(state.position, 0.05f, RED);
+        // raylib still used for drawing only
+        DrawSphere(toRaylib(state.position), 0.05f, RED);
 
         for (const auto& collider : colliders) {
             if (collider.type == ColliderType::POINT_CLOUD) {
                 for (const auto& localPt : collider.localPoints) {
-                    Vector3 worldPoint = Vector3Add(state.position, Vector3Transform(localPt, QuaternionToMatrix(state.orientation)));
-                    DrawCube(worldPoint, 0.08f, 0.08f, 0.08f, BLUE);
-                    DrawLine3D(state.position, worldPoint, Fade(GRAY, 0.5f));
+                    vec3f worldPt = state.position + rotate(localPt, state.orientation);
+                    DrawCube(toRaylib(worldPt), 0.08f, 0.08f, 0.08f, BLUE);
+                    DrawLine3D(toRaylib(state.position), toRaylib(worldPt), Fade(GRAY, 0.5f));
                 }
             }
         }
     }
 
-
-}
+} // namespace inert

@@ -26,8 +26,8 @@ namespace inert {
             PureMath::calculateImpulses(stateA, stateB, restitutionA, restitutionB, m, cd, settings);
 
         if (imp.shouldApply) {
-            bodyA->applyImpulseAtPoint(Vector3Scale(imp.normal,  -1.0f), m.contactPoint);
-            bodyA->applyImpulseAtPoint(Vector3Scale(imp.tangent, -1.0f), m.contactPoint);
+            bodyA->applyImpulseAtPoint(-imp.normal,  m.contactPoint);
+            bodyA->applyImpulseAtPoint(-imp.tangent, m.contactPoint);
             if (bodyB != nullptr) {
                 bodyB->applyImpulseAtPoint(imp.normal,  m.contactPoint);
                 bodyB->applyImpulseAtPoint(imp.tangent, m.contactPoint);
@@ -43,30 +43,26 @@ namespace inert {
 
             for (const auto& collider : body->getColliders()) {
                 if (collider.type == ColliderType::SPHERE) {
-                    const float radius      = collider.size.x;
-                    const float lowestPoint = body->getPosition().y - radius;
+                    const float radius      = collider.size[0];
+                    const float lowestPoint = body->getPosition()[1] - radius;
 
                     if (lowestPoint < groundLevel) {
                         CollisionManifold m;
                         m.isColliding  = true;
                         m.normal       = { 0.0f, -1.0f, 0.0f };
                         m.depth        = groundLevel - lowestPoint;
-                        m.contactPoint = { body->getPosition().x, groundLevel, body->getPosition().z };
+                        m.contactPoint = { body->getPosition()[0], groundLevel, body->getPosition()[2] };
                         resolveManifold(body, nullptr, m);
                     }
                 }
                 else if (collider.type == ColliderType::POINT_CLOUD) {
-                    const Matrix rotMat = QuaternionToMatrix(body->getState().orientation);
                     for (const auto& localPt : collider.localPoints) {
-                        const Vector3 worldPt = Vector3Add(
-                            body->getPosition(),
-                            Vector3Transform(localPt, rotMat)
-                        );
-                        if (worldPt.y < groundLevel) {
+                        vec3f worldPt = body->getPosition() + rotate(localPt, body->getState().orientation);
+                        if (worldPt[1] < groundLevel) {
                             CollisionManifold m;
                             m.isColliding  = true;
                             m.normal       = { 0.0f, -1.0f, 0.0f };
-                            m.depth        = groundLevel - worldPt.y;
+                            m.depth        = groundLevel - worldPt[1];
                             m.contactPoint = worldPt;
                             resolveManifold(body, nullptr, m);
                         }

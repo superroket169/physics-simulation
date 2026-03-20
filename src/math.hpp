@@ -2,55 +2,53 @@
 #define MATH_HPP
 
 #include <algorithm>
-#include "raylib.h"
-#include "raymath.h"
 #include "obj.hpp"
 
 namespace inert {
 
     struct PhysicsSettings {
-        float gravityY          = -9.81f;
-        int solverIterations    = 5;
-        float spatialCellSize   = 3.0f;
-        float distanceEpsilon   = 0.0001f;
-        float velocityEpsilon   = 0.001f;
-        float bounceThreshold   = 0.2f;
-        float baseFrictionMu    = 0.5f;
-        float baumgartePercent  = 0.8f;
-        float baumgarteSlop     = 0.01f;
+        float gravityY         = -9.81f;
+        int   solverIterations = 5;
+        float spatialCellSize  = 3.0f;
+        float distanceEpsilon  = 0.0001f;
+        float velocityEpsilon  = 0.001f;
+        float bounceThreshold  = 0.2f;
+        float baseFrictionMu   = 0.5f;
+        float baumgartePercent = 0.8f;
+        float baumgarteSlop    = 0.01f;
     };
 
     struct CollisionManifold {
-        bool isColliding = false;
-        Vector3 normal = { 0.0f, 0.0f, 0.0f };
-        float depth = 0.0f;
-        Vector3 contactPoint = { 0.0f, 0.0f, 0.0f };
+        bool  isColliding  = false;
+        vec3f normal;
+        float depth        = 0.0f;
+        vec3f contactPoint;
     };
 
     struct PositionalCorrectionResult {
-        Vector3 translationA;
-        Vector3 translationB;
-        bool shouldCorrect;
+        vec3f translationA;
+        vec3f translationB;
+        bool  shouldCorrect;
     };
 
     struct ContactData {
-        Vector3 rA;             // contactPoint : positionA
-        Vector3 rB;             // contactPoint : positionB
-        Vector3 relVel;         // vB - vA (açısal etki dahil)
-        float   velAlongNormal;
-        float   totalInvMass;
+        vec3f rA;             // contactPoint - positionA
+        vec3f rB;             // contactPoint - positionB
+        vec3f relVel;         // vB - vA (with angular contribution)
+        float velAlongNormal;
+        float totalInvMass;
     };
 
     struct ImpulseResult {
-        Vector3 normal;
-        Vector3 tangent;
-        bool    shouldApply;
+        vec3f normal;
+        vec3f tangent;
+        bool  shouldApply;
     };
 
     namespace PureMath {
 
         float calculateAngularEffect
-            (const PhysicsState& state, Vector3 r, Vector3 axis);
+            (const PhysicsState& state, vec3f r, vec3f axis);
 
         ContactData buildContactData
             (const PhysicsState& stateA,

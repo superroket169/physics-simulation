@@ -4,11 +4,11 @@ namespace inert {
     
     std::vector<PhysicsBody*> SpatialHash::getNeighbors(PhysicsBody* body) {
         std::vector<PhysicsBody*> neighbors;
-        Vector3 pos = body->getPosition();
+        vec3f pos = body->getPosition();
 
-        int cx = (int)floor(pos.x / cellSize);
-        int cy = (int)floor(pos.y / cellSize);
-        int cz = (int)floor(pos.z / cellSize);
+        int cx = (int)floor(pos[0] / cellSize);
+        int cy = (int)floor(pos[1] / cellSize);
+        int cz = (int)floor(pos[2] / cellSize);
 
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
@@ -27,4 +27,3 @@ namespace inert {
     }
 
 }
-

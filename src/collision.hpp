@@ -3,7 +3,6 @@
 
 #include <vector>
 #include "raylib.h"
-#include "raymath.h"
 #include "obj.hpp"
 #include "math.hpp"
 #include "hash.hpp"
@@ -42,13 +41,12 @@ namespace inert {
         PhysicsWorld() {
             dispatch = buildDefaultDispatch();
             groundState.inverseMass    = 0.0f;
-            groundState.inverseInertia = { 0.0f, 0.0f, 0.0f };
-            groundState.velocity       = { 0.0f, 0.0f, 0.0f };
-            groundState.rotatVel       = { 0.0f, 0.0f, 0.0f };
+            groundState.inverseInertia = vec3f{};
+            groundState.velocity       = vec3f{};
+            groundState.rotatVel       = vec3f{};
         }
 
         void addObject(PhysicsBody* body) { bodies.push_back(body); }
-
 
         void addGround(float y_level) {
             hasGroundCollision = true;

@@ -62,8 +62,8 @@ namespace inert {
             const PhysicsSettings& settings)
         {
             return PureMath::checkSphereSphere(
-                stateA, colA.size.x,
-                stateB, colB.size.x,
+                stateA, colA.size[0],   // size.x → size[0]
+                stateB, colB.size[0],
                 settings
             );
         }
