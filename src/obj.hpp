@@ -5,6 +5,8 @@
 #include "raylib.h"
 #include <vector>
 #include "vector.hpp"
+#include "types.hpp"
+#include "triangle_mesh.hpp"
 
 namespace inert {
 
@@ -19,19 +21,21 @@ namespace inert {
     inline vec3f fromRaylib(const Vector3& v) { return { v.x, v.y, v.z }; }
 
     enum class BodyType     { STATIC, DYNAMIC, KINEMATIC };
-    enum class ColliderType { POINT_CLOUD, BOX, SPHERE };
+    enum class ColliderType { POINT_CLOUD, BOX, SPHERE, TRIANGLE_MESH };
 
     struct Collider {
         ColliderType type;
 
-        // SPHERE      -> size.x = radius
-        // POINT_CLOUD -> no use
+        // SPHERE         -> size[0] = radius
+        // POINT_CLOUD    -> no use
+        // TRIANGLE_MESH  -> no use
         vec3f size;
 
-        // SPHERE      -> no use
-        // BOX         -> no use
-        // POINT_CLOUD -> point list
+        // POINT_CLOUD    -> point list
         std::vector<vec3f> localPoints;
+
+        // TRIANGLE_MESH  -> triangles in local space
+        std::vector<Triangle> triangles;
     };
 
     struct PhysicsState {
@@ -152,12 +156,17 @@ namespace inert {
 
         void addCollider(ColliderType mode, vec3f dimensions) {
             if (mode == ColliderType::POINT_CLOUD) return;
-            colliders.push_back({ mode, dimensions, {} });
+            if (mode == ColliderType::TRIANGLE_MESH) return;
+            colliders.push_back({ mode, dimensions, {}, {} });
         }
 
         void addCollider(ColliderType mode, const std::vector<vec3f>& points) {
             if (mode != ColliderType::POINT_CLOUD) return;
-            colliders.push_back({ mode, vec3f{}, points });
+            colliders.push_back({ mode, vec3f{}, points, {} });
+        }
+
+        void addCollider(const std::vector<Triangle>& triangles) {
+            colliders.push_back({ ColliderType::TRIANGLE_MESH, vec3f{}, {}, triangles });
         }
 
         // ==========================================
