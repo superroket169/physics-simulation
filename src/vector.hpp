@@ -6,10 +6,6 @@
 
 namespace inert {
 
-    // ==========================================
-    //                  VECTOR
-    // ==========================================
-
     template<typename T, size_t N>
     class vector {
     private:
@@ -17,21 +13,12 @@ namespace inert {
 
     public:
 
-        // Default constructor — fills with zero
         vector() {
             for (size_t i = 0; i < N; i++) data[i] = T(0);
         }
 
-        // ==========================================
-        //              INDEX OPERATORS
-        // ==========================================
-
         T&       operator[](size_t i)       { return data[i]; }
         const T& operator[](size_t i) const { return data[i]; }
-
-        // ==========================================
-        //          ARITHMETIC OPERATORS
-        // ==========================================
 
         vector operator+(const vector& other) const {
             vector result;
@@ -68,10 +55,6 @@ namespace inert {
             return result;
         }
 
-        // ==========================================
-        //        COMPOUND ASSIGNMENT OPERATORS
-        // ==========================================
-
         vector& operator+=(const vector& other) {
             for (size_t i = 0; i < N; i++) data[i] += other[i];
             return *this;
@@ -92,10 +75,6 @@ namespace inert {
             return *this;
         }
 
-        // ==========================================
-        //                  GETTERS
-        // ==========================================
-
         T getDotProduct(const vector& other) const {
             T result = T(0);
             for (size_t i = 0; i < N; i++)
@@ -104,7 +83,7 @@ namespace inert {
         }
 
         T getLengthSqr() const { return getDotProduct(*this); }
-        T getLength() const { return static_cast<T>(sqrt(getLengthSqr())); }
+        T getLength()    const { return static_cast<T>(sqrt(getLengthSqr())); }
 
         vector getNormalized() const {
             T len = getLength();
@@ -112,21 +91,16 @@ namespace inert {
             return *this / len;
         }
 
-        T x() const { static_assert(N >= 1, "Vector must have at least 1 component"); return data[0]; }
-        T y() const { static_assert(N >= 2, "Vector must have at least 2 components"); return data[1]; }
-        T z() const { static_assert(N >= 3, "Vector must have at least 3 components"); return data[2]; }
-        T w() const { static_assert(N >= 4, "Vector must have at least 4 components"); return data[3]; }
+        T x() const { static_assert(N >= 1, "N >= 1 required"); return data[0]; }
+        T y() const { static_assert(N >= 2, "N >= 2 required"); return data[1]; }
+        T z() const { static_assert(N >= 3, "N >= 3 required"); return data[2]; }
+        T w() const { static_assert(N >= 4, "N >= 4 required"); return data[3]; }
 
-        T& x() { static_assert(N >= 1, "Vector must have at least 1 component"); return data[0]; }
-        T& y() { static_assert(N >= 2, "Vector must have at least 2 components"); return data[1]; }
-        T& z() { static_assert(N >= 3, "Vector must have at least 3 components"); return data[2]; }
-        T& w() { static_assert(N >= 4, "Vector must have at least 4 components"); return data[3]; }
-
+        T& x() { static_assert(N >= 1, "N >= 1 required"); return data[0]; }
+        T& y() { static_assert(N >= 2, "N >= 2 required"); return data[1]; }
+        T& z() { static_assert(N >= 3, "N >= 3 required"); return data[2]; }
+        T& w() { static_assert(N >= 4, "N >= 4 required"); return data[3]; }
     };
-
-    // ==========================================
-    //       CROSS PRODUCT — vec3 ONLY
-    // ==========================================
 
     template<typename T>
     vector<T, 3> getCrossProduct(const vector<T, 3>& a, const vector<T, 3>& b) {
@@ -146,36 +120,37 @@ namespace inert {
     //              QUATERNION
     // ==========================================
 
-    // Represents a rotation in 3D space
-    // Stored as (x, y, z, w) where w is the scalar part
     template<typename T>
     struct quaternion {
         T x, y, z, w;
 
-        // Identity quaternion — no rotation
         quaternion() : x(0), y(0), z(0), w(1) {}
         quaternion(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) {}
 
-        T getLengthSqr() const {
-            return x*x + y*y + z*z + w*w;
-        }
-
-        T getLength() const {
-            return static_cast<T>(sqrt(getLengthSqr()));
+        // Reverse the rotation
+        quaternion getInverted() const {
+            return { -x, -y, -z, w };
         }
 
         quaternion getNormalized() const {
-            T len = getLength();
+            T len = static_cast<T>(sqrt(x*x + y*y + z*z + w*w));
             if (len < T(0.0001)) return *this;
             return { x/len, y/len, z/len, w/len };
         }
 
-        quaternion operator*(const quaternion& other) const {
+        // Build a quaternion from an axis and an angle (radians)
+        static quaternion fromAxisAngle(const vector<T, 3>& axis, T angle) {
+            T half = angle * T(0.5);
+            T s    = static_cast<T>(sin(half));
+            return { axis[0]*s, axis[1]*s, axis[2]*s, static_cast<T>(cos(half)) };
+        }
+
+        quaternion operator*(const quaternion& o) const {
             return {
-                w*other.x + x*other.w + y*other.z - z*other.y,
-                w*other.y - x*other.z + y*other.w + z*other.x,
-                w*other.z + x*other.y - y*other.x + z*other.w,
-                w*other.w - x*other.x - y*other.y - z*other.z
+                w*o.x + x*o.w + y*o.z - z*o.y,
+                w*o.y - x*o.z + y*o.w + z*o.x,
+                w*o.z + x*o.y - y*o.x + z*o.w,
+                w*o.w - x*o.x - y*o.y - z*o.z
             };
         }
 
@@ -185,15 +160,12 @@ namespace inert {
         }
     };
 
-    // Rotate a vec3 by a quaternion
     template<typename T>
     vector<T, 3> rotate(const vector<T, 3>& v, const quaternion<T>& q) {
         vector<T, 3> qv;
         qv[0] = q.x; qv[1] = q.y; qv[2] = q.z;
-
         vector<T, 3> t  = getCrossProduct(qv, v) * T(2);
         vector<T, 3> t2 = getCrossProduct(qv, t);
-
         return v + t * q.w + t2;
     }
 
