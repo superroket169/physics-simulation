@@ -31,7 +31,7 @@ namespace inert {
                     body->addForce({ 0.0f, body->getMass() * settings.gravityY, 0.0f });
         }
 
-        void resolveManifold(PhysicsBody* bodyA, PhysicsBody* bodyB, const CollisionManifold& m);
+        void resolveManifold(PhysicsBody* bodyA, PhysicsBody* bodyB, CollisionManifold m);
         void handleGroundCollisions();
         void handleCollisions();
 
@@ -51,6 +51,7 @@ namespace inert {
         void addGround(float y_level) {
             hasGroundCollision = true;
             groundLevel = y_level;
+            groundState.position = { 0.0f, y_level, 0.0f };
         }
 
         void registerCollision(ColliderType a, ColliderType b, CollisionFn fn) {
