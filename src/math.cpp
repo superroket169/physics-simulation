@@ -18,7 +18,7 @@ namespace inert {
             };
 
             vec3f invI_cross      = rotate(invI_cross_local, state.orientation);
-            vec3f cross_invI_cross_r = getCrossProduct(invI_cross, r);
+            vec3f cross_invI_cross_r = getCrossProduct(r, invI_cross);
 
             return cross_invI_cross_r.getDotProduct(axis);
         }
@@ -56,8 +56,13 @@ namespace inert {
 
             if (correctionMag > 0.0001f) {
                 vec3f correction   = m.normal * correctionMag;
-                res.translationA   = correction * (-stateA.inverseMass);
-                res.translationB   = correction * stateB.inverseMass;
+                
+                // normal points B -> A
+                // A moves along +normal
+                // B moves along -normal
+                
+                res.translationA   = correction *  stateA.inverseMass;
+                res.translationB   = correction * -stateB.inverseMass;
                 res.shouldCorrect  = true;
             }
 
@@ -71,7 +76,7 @@ namespace inert {
 
             vec3f vA      = stateA.velocity + getCrossProduct(stateA.rotatVel, cd.rA);
             vec3f vB      = stateB.velocity + getCrossProduct(stateB.rotatVel, cd.rB);
-            cd.relVel         = vB - vA;
+            cd.relVel         = vA - vB;  // positive when A moves away from B along normal
             cd.velAlongNormal = cd.relVel.getDotProduct(m.normal);
             cd.totalInvMass   = stateA.inverseMass + stateB.inverseMass;
             return cd;
@@ -105,7 +110,12 @@ namespace inert {
                 float angularEffectBt = calculateAngularEffect(stateB, cd.rB, t);
 
                 float jt = -tangentSpeed / (cd.totalInvMass + angularEffectAt + angularEffectBt);
-                jt = std::max(-j * settings.baseFrictionMu, std::min(jt, j * settings.baseFrictionMu));
+                
+                // jt is negative (opposing relative tangential motion).
+                // Coulomb friction: |jt| <= mu * j
+                float jtMax = j * settings.baseFrictionMu;
+                if (jt < -jtMax) jt = -jtMax;
+                if (jt >  jtMax) jt =  jtMax;
 
                 res.tangent = t * jt;
             }

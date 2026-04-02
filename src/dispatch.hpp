@@ -4,6 +4,7 @@
 #include <functional>
 #include <unordered_map>
 #include "math.hpp"
+#include "triangle_mesh.hpp"
 
 namespace inert {
 
@@ -62,10 +63,37 @@ namespace inert {
             const PhysicsSettings& settings)
         {
             return PureMath::checkSphereSphere(
-                stateA, colA.size[0],   // size.x → size[0]
+                stateA, colA.size[0],
                 stateB, colB.size[0],
                 settings
             );
+        }
+
+        inline CollisionManifold triangleVsTriangle(
+            const Collider& colA, const PhysicsState& stateA,
+            const Collider& colB, const PhysicsState& stateB,
+            const PhysicsSettings&)
+        {
+            std::vector<Triangle> worldA, worldB;
+            worldA.reserve(colA.triangles.size());
+            worldB.reserve(colB.triangles.size());
+            for (const Triangle& t : colA.triangles) {
+                Triangle wt;
+                wt.a = stateA.position + rotate(t.a, stateA.orientation);
+                wt.b = stateA.position + rotate(t.b, stateA.orientation);
+                wt.c = stateA.position + rotate(t.c, stateA.orientation);
+                wt.normal = rotate(t.normal, stateA.orientation);
+                worldA.push_back(wt);
+            }
+            for (const Triangle& t : colB.triangles) {
+                Triangle wt;
+                wt.a = stateB.position + rotate(t.a, stateB.orientation);
+                wt.b = stateB.position + rotate(t.b, stateB.orientation);
+                wt.c = stateB.position + rotate(t.c, stateB.orientation);
+                wt.normal = rotate(t.normal, stateB.orientation);
+                worldB.push_back(wt);
+            }
+            return checkMeshMesh(worldA, worldB);
         }
 
     } // namespace CollisionFns
@@ -76,7 +104,8 @@ namespace inert {
 
     inline CollisionDispatch buildDefaultDispatch() {
         CollisionDispatch d;
-        d.registerCollision(ColliderType::SPHERE, ColliderType::SPHERE, CollisionFns::sphereVsSphere);
+        d.registerCollision(ColliderType::SPHERE,        ColliderType::SPHERE,        CollisionFns::sphereVsSphere);
+        d.registerCollision(ColliderType::TRIANGLE_MESH, ColliderType::TRIANGLE_MESH, CollisionFns::triangleVsTriangle);
         return d;
     }
 
