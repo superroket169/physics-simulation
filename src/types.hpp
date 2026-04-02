@@ -13,7 +13,7 @@ namespace inert {
         float velocityEpsilon  = 0.001f;
         float bounceThreshold  = 0.2f;
         float baseFrictionMu   = 0.5f;
-        float baumgartePercent = 0.8f;
+        float baumgartePercent = 0.3f;
         float baumgarteSlop    = 0.01f;
     };
 

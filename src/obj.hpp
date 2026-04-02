@@ -132,7 +132,8 @@ namespace inert {
         void setAngularVelocity(vec3f w) { if (bodyType == BodyType::DYNAMIC) state.rotatVel = w; }
         void setRestitution(float r)     { state.restitution = r; }
         void setLinearDamping(float)     { /* TODO */ }
-
+        void setBodyType(BodyType type) { bodyType = type; }
+        
         void setOrientation(quatf q) {
             if (bodyType == BodyType::DYNAMIC)
                 state.orientation = q.getNormalized();

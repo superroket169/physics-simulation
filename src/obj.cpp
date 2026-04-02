@@ -62,9 +62,9 @@ namespace inert {
     void PhysicsBody::applyImpulseAtPoint(vec3f impulse, vec3f contactPoint) {
         if (bodyType == BodyType::STATIC) return;
 
-        vec3f r = contactPoint - state.position;
-
         state.velocity += impulse * state.inverseMass;
+
+        vec3f r = contactPoint - state.position;
         applyAngularImpulse(getCrossProduct(r, impulse));
 
         linearActivity  = true;
